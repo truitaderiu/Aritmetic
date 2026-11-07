@@ -2105,7 +2105,7 @@
 
   function exportFullWorkspaceFile() {
     const dateStr = new Date().toISOString().slice(0, 10);
-    downloadJsonFile(`pissarra-espai-complet-${dateStr}.pissarra.json`, {
+    downloadJsonFile(`aritmetic-espai-complet-${dateStr}.aritmetic.json`, {
       kind: 'pissarra_workspace',
       version: 2,
       exportedAt: new Date().toISOString(),
@@ -2120,7 +2120,7 @@
   function exportNotebookFile(notebook) {
     const nb = notebook || getActiveNotebook();
     if (!nb) return;
-    downloadJsonFile(`llibreta-${slugify(nb.title)}.pissarra.json`, {
+    downloadJsonFile(`llibreta-${slugify(nb.title)}.aritmetic.json`, {
       kind: 'pissarra_notebook',
       version: 2,
       exportedAt: new Date().toISOString(),
@@ -2131,7 +2131,7 @@
   function exportPageFile(page, notebookTitle) {
     const pg = page || getActivePage();
     if (!pg) return;
-    downloadJsonFile(`pagina-${slugify(pg.title)}.pissarra.json`, {
+    downloadJsonFile(`pagina-${slugify(pg.title)}.aritmetic.json`, {
       kind: 'pissarra_page',
       version: 2,
       exportedAt: new Date().toISOString(),
@@ -2181,7 +2181,7 @@
     parts.push(`
       <header class="print-doc-header">
         <div style="min-width:0;">
-          <div class="print-doc-kicker">📚 ${escapeHtml(nb ? nb.title : 'Pissarra Matemàtica · Batxillerat')}</div>
+          <div class="print-doc-kicker">📚 ${escapeHtml(nb ? nb.title : 'Aritmètic · Batxillerat')}</div>
           <h1 class="print-doc-title">${escapeHtml(pg.title || 'Apunts de Matemàtiques')}</h1>
         </div>
         <div class="print-doc-meta">
