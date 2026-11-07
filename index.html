@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pissarra Matemàtica · Batxillerat</title>
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="alternate icon" type="image/png" href="assets/logo.png" />
+  <link rel="stylesheet" href="vendor/mathlive/mathlive-fonts.css" />
+  <link rel="stylesheet" href="vendor/mathlive/mathlive-static.css" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Barra Superior -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="brand" title="Pissarra Matemàtica per a classes online de Batxillerat">
+          <img src="assets/logo.svg" alt="=" class="brand-logo" />
+          <span>Pissarra</span>
+        </div>
+
+        <button class="tb-btn active" id="btnToggleNotebooks" title="Mostrar o amagar el panell de Llibretes i Pàgines">📚 Llibretes</button>
+
+        <div class="breadcrumb-bar" id="breadcrumbBar" title="Clica per obrir o tancar el navegador de llibretes i pàgines">
+          <span class="breadcrumb-nb" id="breadcrumbNb">Llibreta</span>
+          <span class="breadcrumb-sep">›</span>
+          <span class="breadcrumb-page" id="breadcrumbPage">Pàgina</span>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="toolbar-group">
+          <button class="tb-btn" id="btnAddApartatTop" title="Crear un nou apartat a sota (Cmd/Ctrl + Enter)">⊞ Apartat</button>
+          <button class="tb-btn" id="btnAddTextInApTop" title="Afegir un bloc de text amb salt de línia automàtic dins l'apartat actual (Alt + T)">¶ Text</button>
+          <button class="tb-btn" id="btnAddSectionTop" title="Inserir un títol de tema o d'exercici nou">§ Secció</button>
+        </div>
+
+        <div class="toolbar-group">
+          <button class="tb-btn icon-only" id="btnToggleLaser" data-tooltip="Làser" aria-label="Làser">🔴</button>
+          <button class="tb-btn icon-only" id="btnToggleInk" data-tooltip="Anotar" aria-label="Anotar">✏️</button>
+          <button class="tb-btn icon-only" id="btnTimerToggle" data-tooltip="Temps" aria-label="Temps">⏱️</button>
+
+          <!-- Popover del Temporitzador -->
+          <div class="timer-popover" id="timerPopover">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;">
+              <span>⏱️ Temps d'exercici</span>
+              <button class="row-icon-btn" id="btnTimerClose">✕</button>
+            </div>
+            <div class="timer-display-big" id="timerDisplayBig">03:00</div>
+            <div class="timer-presets">
+              <button class="var-mini-btn" data-timer-sec="60">1m</button>
+              <button class="var-mini-btn" data-timer-sec="180">3m</button>
+              <button class="var-mini-btn" data-timer-sec="300">5m</button>
+              <button class="var-mini-btn" data-timer-sec="0">Crono</button>
+            </div>
+            <button class="primary-action-btn" id="btnTimerStartPause">▶ Inicia</button>
+          </div>
+        </div>
+
+        <div class="toolbar-group" title="Mida de lletra i fórmules per compartir pantalla">
+          <button class="tb-btn" id="btnZoomOut" aria-label="Reduir mida">A−</button>
+          <span class="zoom-label" id="zoomLabel">100%</span>
+          <button class="tb-btn" id="btnZoomIn" aria-label="Augmentar mida">A+</button>
+        </div>
+
+        <div class="toolbar-group" id="cloudToolbarGroup">
+          <button class="tb-btn" id="btnCloudDrive" title="Connecta el teu Google Drive personal per sincronitzar les llibretes">
+            <span class="cloud-status-dot offline"></span><span>☁️ Drive</span>
+          </button>
+
+          <!-- Popover de Sincronització amb Google Drive -->
+          <div class="cloud-popover" id="cloudPopover">
+            <div class="cloud-popover-header">
+              <span>☁️ Google Drive Personal</span>
+              <button class="row-icon-btn" id="btnCloudClose" aria-label="Tancar">✕</button>
+            </div>
+            <div class="cloud-popover-body" id="cloudPopoverBody"></div>
+          </div>
+        </div>
+
+        <div class="toolbar-group">
+          <button class="tb-btn icon-only" id="btnOpenSaveModal" data-tooltip="Desar / Obrir" aria-label="Desar / Obrir">💾</button>
+          <button class="tb-btn icon-only active" id="btnToggleScoreboard" data-tooltip="Variables" aria-label="Variables">📊</button>
+          <button class="tb-btn" id="btnPrintPdf" title="Imprimir o desar com a PDF net per enviar a l'alumne">🖨️ PDF</button>
+          <button class="tb-btn" id="btnThemeToggle" title="Canviar entre mode clar i pissarra fosca">🌙</button>
+          <button class="tb-btn" id="btnHelp" title="Dreceres de teclat ràpides">?</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Barra flotant del Llapis d'Anotació -->
+    <div class="ink-toolbar" id="inkToolbar">
+      <strong style="margin-right:4px;">Llapis:</strong>
+      <button class="ink-color-dot active" data-color="#ef4444" style="background:#ef4444;" title="Vermell"></button>
+      <button class="ink-color-dot" data-color="#2563eb" style="background:#2563eb;" title="Blau"></button>
+      <button class="ink-color-dot" data-color="#059669" style="background:#059669;" title="Verd"></button>
+      <button class="ink-color-dot" data-color="#d97706" style="background:#d97706;" title="Àmbar"></button>
+      <button class="tb-btn" id="btnInkUndo" title="Desfer últim traç">↶ Desfer</button>
+      <button class="tb-btn" id="btnInkClear" title="Esborrar tots els traços de la pàgina">🗑️ Netejar</button>
+      <button class="tb-btn active" id="btnInkDone">Fet</button>
+    </div>
+
+    <!-- Espai Central en 3 Columnes: Llibretes | Pissarra d'Apartats | Scoreboard -->
+    <main class="workspace-main">
+      <!-- Panell Esquerre: Llibretes i Pàgines -->
+      <aside class="notebooks-sidebar" id="notebooksSidebar" aria-label="Llibretes i pàgines">
+        <div class="nb-sidebar-header">
+          <span class="nb-sidebar-title">Llibretes i Pàgines</span>
+          <button class="ap-pill-btn" id="btnNewNotebook" title="Crear una nova llibreta">+ Llibreta</button>
+        </div>
+        <div class="nb-list-scroll" id="notebooksList"></div>
+        <div class="nb-sidebar-footer">
+          <button class="nb-footer-btn" id="btnLoadShowcaseTour" title="Afegeix una còpia nova del Tour Complet amb totes les funcions">
+            🎓 Afegir pàgina Guia Completa
+          </button>
+        </div>
+      </aside>
+
+      <!-- Pissarra Central d'Apartats -->
+      <section class="whiteboard-scroll" aria-label="Pissarra d'apartats i equacions">
+        <div class="whiteboard-canvas-wrap" id="canvasWrap">
+          <canvas class="annotation-canvas" id="annotationCanvas"></canvas>
+          <canvas class="laser-canvas" id="laserCanvas"></canvas>
+          <div class="blocks-list" id="blocksList"></div>
+          <div class="whiteboard-click-tail" id="whiteboardTail">
+            <span>⊞ Clica aquí (o prem Cmd/Ctrl + Enter) per afegir un nou apartat a sota…</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panell Dret: Scoreboard de Variables i Funcions -->
+      <aside class="scoreboard-panel" id="scoreboardPanel" aria-label="Tauler de variables">
+        <div class="scoreboard-header">
+          <div class="scoreboard-title-row">
+            <div class="scoreboard-title">
+              <span>Tauler de Variables</span>
+              <span class="var-count-badge" id="varCountBadge">0</span>
+            </div>
+            <button class="ap-pill-btn" id="btnOpenGraphHeader" style="display:none;" title="Representar gràficament les funcions declarades">
+              📈 Gràfica
+            </button>
+          </div>
+          <div class="scope-toggle" title="Tria quin abast d'equacions analitza el Tauler de Variables">
+            <button class="scope-btn" id="btnScopeApartat">Apartat actual</button>
+            <button class="scope-btn active" id="btnScopeSection">Exercici actual</button>
+            <button class="scope-btn" id="btnScopePage">Tota la pàgina</button>
+          </div>
+        </div>
+        <div class="scoreboard-body" id="scoreboardBody"></div>
+      </aside>
+    </main>
+
+    <!-- Teclat Matemàtic Inferior -->
+    <section class="keypad-dock" id="keypadDock" aria-label="Teclat matemàtic">
+      <div class="keypad-topbar">
+        <div class="keypad-tabs" id="keypadTabs"></div>
+        <div class="keypad-controls">
+          <div class="angle-switch" title="Unitat d'angles per a càlculs trigonomètrics">
+            <button class="angle-btn active" id="btnRad">RAD</button>
+            <button class="angle-btn" id="btnDeg">DEG</button>
+          </div>
+          <button class="kp-ctrl-btn" id="btnUndo" title="Desfer dins l'equació (Cmd/Ctrl + Z)">↶</button>
+          <button class="kp-ctrl-btn" id="btnRedo" title="Refer dins l'equació (Cmd/Ctrl + Shift + Z)">↷</button>
+          <button class="kp-ctrl-btn" id="btnClearBoard" title="Buidar la pàgina actual">🧹 Buidar pàgina</button>
+          <button class="kp-ctrl-btn" id="btnToggleKeypad">▼ Amagar teclat</button>
+        </div>
+      </div>
+      <div class="keypad-content" id="keypadContent"></div>
+    </section>
+  </div>
+
+  <!-- Modal 1: Desar i Obrir Continguts (Totals o Individuals) -->
+  <div class="modal-backdrop" id="saveModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>💾 Guardar i Recuperar Continguts</h2>
+        <button class="row-icon-btn" id="btnCloseSaveModal" aria-label="Tancar">✕</button>
+      </div>
+      <p style="font-size:13px;color:var(--text-secondary);margin-top:0;">
+        Tot es desa automàticament al navegador, però aquí pots baixar fitxers <code>.pissarra.json</code> al teu ordinador (tot sencer, una llibreta o una pàgina solta) i tornar-los a obrir quan vulguis:
+      </p>
+
+      <div class="save-grid">
+        <div class="save-option-card">
+          <div>
+            <h3>📦 Tot l'espai complet</h3>
+            <p>Guarda totes les teves llibretes, pàgines, apartats i anotacions en un únic fitxer de còpia de seguretat.</p>
+          </div>
+          <button class="primary-action-btn" id="btnExportWorkspace">Baixar tot l'espai (.json)</button>
+        </div>
+
+        <div class="save-option-card">
+          <div>
+            <h3>📚 Llibreta actual</h3>
+            <p>Guarda només la llibreta <strong id="saveActiveNbName"></strong> amb totes les seves pàgines.</p>
+          </div>
+          <button class="secondary-action-btn" id="btnExportNotebook">Baixar aquesta llibreta (.json)</button>
+        </div>
+
+        <div class="save-option-card">
+          <div>
+            <h3>📄 Pàgina individual</h3>
+            <p>Guarda només la pàgina activa <strong id="saveActivePgName"></strong> per compartir-la o reutilitzar-la.</p>
+          </div>
+          <button class="secondary-action-btn" id="btnExportPage">Baixar aquesta pàgina (.json)</button>
+        </div>
+
+        <div class="save-option-card">
+          <div>
+            <h3>🖨️ PDF o Codi LaTeX</h3>
+            <p>Genera un PDF net per enviar a l'alumne o copia totes les equacions de la pàgina en format LaTeX.</p>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="secondary-action-btn" style="flex:1;" id="btnPrintFromModal">PDF / Imprimir</button>
+            <button class="secondary-action-btn" style="flex:1;" id="btnCopyPageLatex">Copiar LaTeX</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border-subtle);padding-top:14px;">
+        <h3 style="margin:0 0 6px 0;font-size:14px;">📂 Carregar / Importar un fitxer guardat</h3>
+        <p style="font-size:12.5px;color:var(--text-secondary);margin:0 0 10px 0;">
+          Pots obrir tant un fitxer d'espai complet com una llibreta o una pàgina individual:
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="primary-action-btn" id="btnImportMerge">➕ Afegir a les meves llibretes (sense esborrar res)</button>
+          <button class="secondary-action-btn" id="btnImportReplace">🔄 Substituir tot l'espai actual</button>
+        </div>
+        <input type="file" id="importFileInput" accept=".json,application/json" style="display:none;" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Gràfica Cartesiana Interactiva -->
+  <div class="modal-backdrop" id="graphModal">
+    <div class="modal-card graph-modal-card">
+      <div class="modal-header">
+        <h2>📈 Gràfica Interactiva de les Funcions Declarades</h2>
+        <button class="row-icon-btn" id="btnCloseGraph" aria-label="Tancar">✕</button>
+      </div>
+      <div class="graph-legend">
+        <div class="graph-fn-chips" id="graphFnChips"></div>
+        <button class="secondary-action-btn" id="btnResetGraphView">Centrar eixos</button>
+      </div>
+      <div class="graph-canvas-box">
+        <canvas class="graph-canvas" id="graphCanvas"></canvas>
+        <div class="graph-coords-badge" id="graphCoordsBadge">Roda del ratolí: zoom · Arrossega: moure</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Dreceres de Teclat -->
+  <div class="modal-backdrop" id="helpModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>⌨️ Dreceres ràpides d'Apartats, Text i Equacions</h2>
+        <button class="row-icon-btn" id="btnCloseHelp" aria-label="Tancar">✕</button>
+      </div>
+      <div class="shortcuts-grid">
+        <div class="sc-item"><span>Separar / Tabular en línia</span> <kbd>Tab ⇥</kbd> o <kbd>Espai</kbd></div>
+        <div class="sc-item"><span>Nova equació (mateix apartat)</span> <kbd>Enter ↵</kbd></div>
+        <div class="sc-item"><span>Nou apartat a sota</span> <kbd>⌘/Ctrl + Enter</kbd></div>
+        <div class="sc-item"><span>Nou apartat ràpid</span> <kbd>Doble Enter</kbd></div>
+        <div class="sc-item"><span>Afegir bloc de paràgraf</span> <kbd>Alt + T</kbd></div>
+        <div class="sc-item"><span>De bloc de text a equació</span> <kbd>Shift + Enter</kbd></div>
+        <div class="sc-item"><span>Text curt dins d'equació</span> <kbd>"</kbd> o <kbd>⌘/Ctrl + T</kbd></div>
+        <div class="sc-item"><span>Moure's amunt / avall</span> <kbd>↑</kbd> / <kbd>↓</kbd></div>
+        <div class="sc-item"><span>Fracció / Potència / Subíndex</span> <kbd>/</kbd> <kbd>^</kbd> <kbd>_</kbd></div>
+        <div class="sc-item"><span>Límit / Integral / Arrel</span> <kbd>lim</kbd> <kbd>int</kbd> <kbd>sqrt</kbd></div>
+        <div class="sc-item"><span>Funció a trossos ràpida</span> <kbd>trossos</kbd></div>
+        <div class="sc-item"><span>Afegir fila a sistema/trossos</span> <kbd>Shift + Enter</kbd></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Resolució de Conflicte de Sincronització entre Dispositius -->
+  <div class="modal-backdrop" id="cloudConflictModal">
+    <div class="modal-card" style="max-width:520px;">
+      <div class="modal-header">
+        <h2>☁️ Versions diferents detectades</h2>
+        <button class="row-icon-btn" id="btnCloseConflictModal" aria-label="Tancar">✕</button>
+      </div>
+      <p style="font-size:13.5px;color:var(--text-secondary);margin-top:0;">
+        Tant el teu <strong>Google Drive</strong> com <strong>aquest navegador</strong> tenen canvis propis. Tria quina versió vols conservar:
+      </p>
+      <div class="save-grid" style="margin-bottom:14px;">
+        <div class="save-option-card">
+          <div>
+            <h3>☁️ Google Drive</h3>
+            <p id="conflictCloudSummary" style="margin:4px 0 0 0;">—</p>
+          </div>
+          <button class="primary-action-btn" id="btnConflictUseCloud">📥 Carregar del Drive</button>
+        </div>
+        <div class="save-option-card">
+          <div>
+            <h3>💻 Aquest dispositiu</h3>
+            <p id="conflictLocalSummary" style="margin:4px 0 0 0;">—</p>
+          </div>
+          <button class="secondary-action-btn" id="btnConflictUseLocal">📤 Pujar al Drive</button>
+        </div>
+      </div>
+      <button class="secondary-action-btn" style="width:100%;" id="btnConflictMerge">
+        ➕ Combinar totes les llibretes (sense esborrar res)
+      </button>
+    </div>
+  </div>
+
+  <!-- Contenidor dedicat d'alta qualitat tipogràfica per a Impressió / PDF (A4) -->
+  <div id="printDocument" class="print-document" aria-hidden="true"></div>
+
+  <script defer src="vendor/mathlive/mathlive.min.js"></script>
+  <script defer src="js/math-engine.js"></script>
+  <script defer src="js/keypads.js"></script>
+  <script defer src="js/app.js"></script>
+  <script defer src="js/cloud-drive.js"></script>
+</body>
+</html>
