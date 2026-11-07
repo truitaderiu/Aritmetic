@@ -13,7 +13,8 @@ Aquest document està pensat per facilitar la feina a **futures instàncies d'ag
 | Fitxer / Ruta | Responsabilitat principal |
 | :--- | :--- |
 | `index.html` | Estructura de l'aplicació (Topbar, 3 columnes, Teclat inferior, Modals de Desar/Gràfica/Ajuda/Conflictes/Configuració i contenidor `#printDocument`). |
-| `css/styles.css` | Sistema de variables CSS, 6 temes visuals (`classic`, `paper`, `sage`, `midnight`, `chalkboard`, `carbon`), disseny responsiu mòbil/tauleta i maquetació A4 `@media print`. |
+| `css/styles.css` | Sistema de variables CSS, 6 temes predefinits (`classic`, `paper`, `sage`, `midnight`, `chalkboard`, `carbon`) + suport per al tema `custom`, disseny responsiu mòbil/tauleta i maquetació A4 `@media print`. |
+| `assets/logo.svg`, `assets/logo.png` | Icona monocromàtica en tons grisos grafit/zinc (`=`) utilitzada a la barra superior, `favicon` i `apple-touch-icon`. |
 | `js/math-engine.js` | Motor matemàtic independent (`window.MathEngine`): tokenitzador LaTeX, parser AST, aritmètica racional exacta, resolució d'equacions, Gauss-Jordan i estudi de funcions a trossos. |
 | `js/keypads.js` | Definició declarativa dels teclats matemàtics (`window.KeypadConfig.KEYPAD_TABS`), dreceres `CUSTOM_INLINE_SHORTCUTS` i el document mostra `FULL_SHOWCASE_BLOCKS`. |
 | `js/app.js` | Estat central (`state`), gestió de Llibretes/Pàgines/Apartats, integració amb MathLive, compressió i redimensionament d'imatges, gràfica `<canvas>`, llapis/làser, PDF i pont `window.PissarraApp`. |
@@ -42,14 +43,22 @@ Quan actualitzeu el contingut de la pàgina d'exemple `🌟 Tour Complet (Totes 
 {
   "kind": "pissarra_workspace",
   "version": 2,
-  "tourVersion": 5,
+  "tourVersion": 6,
   "savedAt": "2026-11-07T12:00:00.000Z",
   "activeNotebookId": "nb_...",
   "activePageId": "page_...",
   "settings": {
     "textFont": "jakarta",
+    "inlineTextScale": 100,
     "textLineHeight": "normal",
     "theme": "classic",
+    "customTheme": {
+      "boardBg": "#ffffff",
+      "appBg": "#f1f5f9",
+      "textPrimary": "#0f172a",
+      "accentColor": "#7c3aed",
+      "keypadBg": "#eaeef4"
+    },
     "lastLightTheme": "classic",
     "lastDarkTheme": "midnight",
     "darkMode": false,
@@ -148,14 +157,17 @@ El motor està dissenyat sota el principi de **Pissarra sense Errors**: l'usuari
 
 ## 5. Integració amb MathLive, Tipografies i Temes Visuals
 
-### Com canvia de tipografia el text amb `"` (`\text{...}`)
-- MathLive renderitza cada `<math-field>` dins d'un **Shadow DOM** aïllat. Internament, MathLive estilitza `.ML__text` amb:
-  `font-family: var(--text-font-family, system-ui, ...)`
-- Les propietats personalitzades CSS (`--*`) **sí que travessen la frontera del Shadow DOM**! Per això `applyThemeAndZoom()` (`js/app.js`) i `:root` (`css/styles.css`) defineixen tant `--font-plain-text` com `--text-font-family` amb la mateixa pila tipogràfica (`FONT_STACKS[state.textFont]`), a més de `.ML__text { font-family: var(--font-plain-text) !important; }` per al HTML estàtic del Scoreboard i del PDF.
+### Com canvia de tipografia i mida el text amb `"` (`\text{...}`)
+- MathLive renderitza cada `<math-field>` dins d'un **Shadow DOM obert** (`mf.shadowRoot`) i gestiona els estils via `adoptedStyleSheets`.
+- Les propietats personalitzades CSS (`--*`) **sí que travessen la frontera del Shadow DOM**! Per això `applyThemeAndZoom()` (`js/app.js`) i `:root` (`css/styles.css`) defineixen:
+  - `--font-plain-text` i `--text-font-family` amb la mateixa pila tipogràfica (`FONT_STACKS[state.textFont]`).
+  - `--inline-text-scale` (de `0.65em` a `1.40em`, segons `state.inlineTextScale` entre `65%` i `140%`).
+- `injectMathfieldShadowStyles(mf)` (`js/app.js`) afegeix un únic `CSSStyleSheet` compartit (`sharedMathfieldSheet`) a `mf.shadowRoot.adoptedStyleSheets` amb `.ML__text { font-size: var(--inline-text-scale, 1em) !important; }` i `.ML__text .ML__text { font-size: 1em !important; }` (evitant que sub-spans nidats multipliquin l'escala), i `css/styles.css` aplica la mateixa regla al HTML estàtic del Scoreboard, la vista prèvia i el PDF.
 
-### Sistema de Temes (`THEMES`)
-- Els 6 temes (`classic`, `paper`, `sage`, `midnight`, `chalkboard`, `carbon`) s'activen mitjançant `document.body.dataset.theme = state.theme` i sincronitzen `document.body.classList.toggle('dark-theme', isDark)`.
-- `state.lastLightTheme` i `state.lastDarkTheme` recorden quin tema clar i quin tema fosc ha triat l'usuari al Selector de Temes (`⚙️`), de manera que el botó ràpid `🌙 / ☀️` de la barra superior alterna entre els seus dos temes preferits.
+### Sistema de Temes (`THEMES` + Tema Personalitzat `custom`)
+- Els 6 temes predefinits (`classic`, `paper`, `sage`, `midnight`, `chalkboard`, `carbon`) i el tema a mida (`custom`) s'activen mitjançant `document.body.dataset.theme = state.theme` i sincronitzen `document.body.classList.toggle('dark-theme', isDark)`.
+- Quan `state.theme === 'custom'`, `applyCustomThemeCssVars(state.customTheme)` calcula la luminància relativa WCAG (`getRelativeLuminance`) de `boardBg` i `accentColor` i genera totes les variables CSS derivades (`--bg-row-hover`, `--border-subtle`, `--text-secondary`, `--key-bg`, `--active-btn-fg`, etc.) directament a `document.body.style`. En tornar a qualsevol dels 6 temes predefinits, `clearCustomThemeCssVars()` neteja aquestes propietats inline.
+- `state.lastLightTheme` i `state.lastDarkTheme` recorden quin tema clar i quin tema fosc (incloent `custom`, segons la luminància del seu fons) ha triat l'usuari al Selector de Temes (`⚙️`), de manera que el botó ràpid `🌙 / ☀️` de la barra superior alterna entre els seus dos temes preferits.
 
 ---
 

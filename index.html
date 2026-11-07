@@ -364,7 +364,23 @@
           </div>
 
           <div class="font-live-preview" id="settingsFontPreview">
-            Sigui f(x) una funció contínua i derivable en l'interval obert (a, b). Aleshores existeix un punt c on el pendent de la recta tangent coincideix amb la taxa de variació mitjana.
+            <div>Sigui f(x) una funció contínua i derivable en l'interval obert (a, b). Aleshores existeix un punt c on el pendent de la recta tangent coincideix amb la taxa de variació mitjana.</div>
+            <div class="font-live-inline-sample">
+              <span class="font-live-inline-tag">Mostra amb <code>"</code> dins d'equació:</span>
+              <span class="font-live-math-mock"><i>v</i><sub><span class="ML__text">màx</span></sub> = 12 <span class="ML__text">m/s (velocitat límit)</span></span>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Mida del text dins d'equacions (<code>"</code>)</div>
+              <div class="settings-row-sub">Escala del text i unitats inserits amb cometes (<code>\text{...}</code>) i subíndexs respecte a la fórmula</div>
+            </div>
+            <div class="settings-zoom-ctrl">
+              <button type="button" class="secondary-action-btn" id="btnInlineTextScaleOut" title="Reduir mida del text introduït amb cometes">A−</button>
+              <span class="settings-zoom-val" id="settingsInlineTextScaleVal">100%</span>
+              <button type="button" class="secondary-action-btn" id="btnInlineTextScaleIn" title="Augmentar mida del text introduït amb cometes">A+</button>
+            </div>
           </div>
 
           <div class="settings-row">
@@ -386,7 +402,7 @@
 
           <div>
             <div class="settings-row-label" style="margin-bottom:3px;">Estètica i paleta de colors</div>
-            <div class="settings-row-sub" style="margin-bottom:9px;">Prova diferents ambients clars i foscos (el botó 🌙/☀️ de dalt alterna entre el teu tema clar i fosc preferits)</div>
+            <div class="settings-row-sub" style="margin-bottom:9px;">Prova els 6 temes inclosos o dissenya un tema personalitzat amb els colors que vulguis</div>
             <div class="theme-cards-grid" id="settingsThemeGrid">
               <button type="button" class="theme-choice-card" data-theme-choice="classic">
                 <span class="theme-swatch-preview" style="background:#ffffff;border-color:#cbd5e1;">
@@ -447,6 +463,63 @@
                 <span class="theme-choice-name">🖤 Carbó OLED</span>
                 <span class="theme-choice-tag">Negre pur d'alt contrast</span>
               </button>
+
+              <button type="button" class="theme-choice-card" data-theme-choice="custom">
+                <span class="theme-swatch-preview" id="customThemeSwatchPreview" style="background:#ffffff;border-color:#cbd5e1;">
+                  <span class="theme-swatch-bar" id="customThemeSwatchBar" style="background:#f1f5f9;"></span>
+                  <span class="theme-swatch-dot" id="customThemeSwatchDot" style="background:#7c3aed;"></span>
+                  <span class="theme-swatch-ink" id="customThemeSwatchInk" style="color:#0f172a;">f(x)</span>
+                </span>
+                <span class="theme-choice-name">🎨 Personalitzat</span>
+                <span class="theme-choice-tag">Tria els teus colors</span>
+              </button>
+            </div>
+
+            <div class="custom-theme-panel" id="customThemePanel" style="display:none;">
+              <div class="custom-theme-panel-head">
+                <div>
+                  <div class="custom-theme-panel-title">🎨 Paleta del tema personalitzat</div>
+                  <div class="custom-theme-panel-sub">Escull els colors al teu gust (les vores, ombres i contrastos es calculen automàticament i es sincronitzen a Drive)</div>
+                </div>
+                <button type="button" class="secondary-action-btn" id="btnResetCustomTheme">Restablir paleta</button>
+              </div>
+              <div class="custom-color-grid">
+                <label class="custom-color-item" for="customColBoard">
+                  <input type="color" class="custom-color-input" id="customColBoard" value="#ffffff" />
+                  <span class="custom-color-meta">
+                    <span class="custom-color-name">Fons de pissarra</span>
+                    <span class="custom-color-hex" id="customHexBoard">#ffffff</span>
+                  </span>
+                </label>
+                <label class="custom-color-item" for="customColApp">
+                  <input type="color" class="custom-color-input" id="customColApp" value="#f1f5f9" />
+                  <span class="custom-color-meta">
+                    <span class="custom-color-name">Marc i panells</span>
+                    <span class="custom-color-hex" id="customHexApp">#f1f5f9</span>
+                  </span>
+                </label>
+                <label class="custom-color-item" for="customColText">
+                  <input type="color" class="custom-color-input" id="customColText" value="#0f172a" />
+                  <span class="custom-color-meta">
+                    <span class="custom-color-name">Tinta i fórmules</span>
+                    <span class="custom-color-hex" id="customHexText">#0f172a</span>
+                  </span>
+                </label>
+                <label class="custom-color-item" for="customColAccent">
+                  <input type="color" class="custom-color-input" id="customColAccent" value="#7c3aed" />
+                  <span class="custom-color-meta">
+                    <span class="custom-color-name">Color d'accent</span>
+                    <span class="custom-color-hex" id="customHexAccent">#7c3aed</span>
+                  </span>
+                </label>
+                <label class="custom-color-item" for="customColKeypad">
+                  <input type="color" class="custom-color-input" id="customColKeypad" value="#eaeef4" />
+                  <span class="custom-color-meta">
+                    <span class="custom-color-name">Teclat inferior</span>
+                    <span class="custom-color-hex" id="customHexKeypad">#eaeef4</span>
+                  </span>
+                </label>
+              </div>
             </div>
           </div>
 

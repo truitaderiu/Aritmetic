@@ -41,20 +41,31 @@
     reading: '820px'
   };
 
-  // Catàleg de temes visuals d'Aritmètic (3 clars + 3 foscos)
+  const DEFAULT_CUSTOM_THEME = {
+    boardBg: '#ffffff',
+    appBg: '#f1f5f9',
+    textPrimary: '#0f172a',
+    accentColor: '#7c3aed',
+    keypadBg: '#eaeef4'
+  };
+
+  // Catàleg de temes visuals d'Aritmètic (3 clars + 3 foscos + 1 personalitzat a mida)
   const THEMES = {
     classic: { label: 'Clàssic Blanc', isDark: false, boardBg: '#ffffff' },
     paper: { label: 'Paper Càlid', isDark: false, boardBg: '#fcfaf4' },
     sage: { label: 'Sàlvia Suau', isDark: false, boardBg: '#f7fbf9' },
     midnight: { label: 'Nit Blava', isDark: true, boardBg: '#111a2e' },
     chalkboard: { label: "Pissarra d'Aula", isDark: true, boardBg: '#14281d' },
-    carbon: { label: 'Carbó OLED', isDark: true, boardBg: '#121215' }
+    carbon: { label: 'Carbó OLED', isDark: true, boardBg: '#121215' },
+    custom: { label: 'Personalitzat', isDark: false, boardBg: '#ffffff' }
   };
 
   const DEFAULT_SETTINGS = {
     textFont: 'jakarta',
+    inlineTextScale: 100,
     textLineHeight: 'normal',
     theme: 'classic',
+    customTheme: { ...DEFAULT_CUSTOM_THEME },
     lastLightTheme: 'classic',
     lastDarkTheme: 'midnight',
     darkMode: false,
@@ -87,6 +98,7 @@
     scoreboardCollapsed: false,
     keypadCollapsed: false,
     theme: DEFAULT_SETTINGS.theme,
+    customTheme: { ...DEFAULT_CUSTOM_THEME },
     lastLightTheme: DEFAULT_SETTINGS.lastLightTheme,
     lastDarkTheme: DEFAULT_SETTINGS.lastDarkTheme,
     darkMode: DEFAULT_SETTINGS.darkMode,
@@ -94,6 +106,7 @@
 
     // Preferències personalitzables d'Aritmètic (sincronitzades amb Drive)
     textFont: DEFAULT_SETTINGS.textFont,
+    inlineTextScale: DEFAULT_SETTINGS.inlineTextScale,
     textLineHeight: DEFAULT_SETTINGS.textLineHeight,
     boardPattern: DEFAULT_SETTINGS.boardPattern,
     boardWidth: DEFAULT_SETTINGS.boardWidth,
@@ -354,6 +367,72 @@
     return rawList.slice(0, 100).map((nb, idx) => sanitizeNotebookObject(nb, idx));
   }
 
+  function normalizeHex6(raw, fallback = '#2563eb') {
+    if (typeof raw === 'string') {
+      const s = raw.trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(s)) return s.toLowerCase();
+      if (/^#[0-9a-fA-F]{3}$/.test(s)) {
+        return `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`.toLowerCase();
+      }
+    }
+    return fallback;
+  }
+
+  function hexToRgb(hex) {
+    const clean = normalizeHex6(hex, '#000000');
+    return {
+      r: parseInt(clean.slice(1, 3), 16),
+      g: parseInt(clean.slice(3, 5), 16),
+      b: parseInt(clean.slice(5, 7), 16)
+    };
+  }
+
+  function rgbToHex(r, g, b) {
+    const clamp = v => Math.max(0, Math.min(255, Math.round(v)));
+    return `#${[r, g, b].map(v => clamp(v).toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  function mixHexColors(hexA, hexB, weightB = 0.5) {
+    const a = hexToRgb(hexA);
+    const b = hexToRgb(hexB);
+    const t = Math.max(0, Math.min(1, weightB));
+    return rgbToHex(
+      a.r + (b.r - a.r) * t,
+      a.g + (b.g - a.g) * t,
+      a.b + (b.b - a.b) * t
+    );
+  }
+
+  function getRelativeLuminance(hex) {
+    const { r, g, b } = hexToRgb(hex);
+    const lin = [r, g, b].map((c) => {
+      const s = c / 255;
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  }
+
+  function sanitizeCustomTheme(raw) {
+    const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    return {
+      boardBg: normalizeHex6(obj.boardBg, DEFAULT_CUSTOM_THEME.boardBg),
+      appBg: normalizeHex6(obj.appBg, DEFAULT_CUSTOM_THEME.appBg),
+      textPrimary: normalizeHex6(obj.textPrimary, DEFAULT_CUSTOM_THEME.textPrimary),
+      accentColor: normalizeHex6(obj.accentColor, DEFAULT_CUSTOM_THEME.accentColor),
+      keypadBg: normalizeHex6(obj.keypadBg, DEFAULT_CUSTOM_THEME.keypadBg)
+    };
+  }
+
+  function isCustomThemeDark(ct = state.customTheme) {
+    const clean = sanitizeCustomTheme(ct);
+    return getRelativeLuminance(clean.boardBg) < 0.34;
+  }
+
+  function isThemeKeyDark(themeKey, ct = state.customTheme) {
+    if (themeKey === 'custom') return isCustomThemeDark(ct);
+    return Boolean(THEMES[themeKey]?.isDark);
+  }
+
   function applySettingsToState(rawSettings, options = { includePanelLayout: false }) {
     const s = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
     if (s.angleMode === 'RAD' || s.angleMode === 'DEG') state.angleMode = s.angleMode;
@@ -361,16 +440,20 @@
       state.scoreboardScope = s.scoreboardScope;
     }
 
-    if (typeof s.lastLightTheme === 'string' && THEMES[s.lastLightTheme] && !THEMES[s.lastLightTheme].isDark) {
+    if (s.customTheme !== undefined) {
+      state.customTheme = sanitizeCustomTheme(s.customTheme);
+    }
+
+    if (typeof s.lastLightTheme === 'string' && Object.prototype.hasOwnProperty.call(THEMES, s.lastLightTheme) && !isThemeKeyDark(s.lastLightTheme, state.customTheme)) {
       state.lastLightTheme = s.lastLightTheme;
     }
-    if (typeof s.lastDarkTheme === 'string' && THEMES[s.lastDarkTheme] && THEMES[s.lastDarkTheme].isDark) {
+    if (typeof s.lastDarkTheme === 'string' && Object.prototype.hasOwnProperty.call(THEMES, s.lastDarkTheme) && isThemeKeyDark(s.lastDarkTheme, state.customTheme)) {
       state.lastDarkTheme = s.lastDarkTheme;
     }
 
     if (typeof s.theme === 'string' && Object.prototype.hasOwnProperty.call(THEMES, s.theme)) {
       state.theme = s.theme;
-      state.darkMode = THEMES[s.theme].isDark;
+      state.darkMode = isThemeKeyDark(s.theme, state.customTheme);
       if (state.darkMode) state.lastDarkTheme = s.theme;
       else state.lastLightTheme = s.theme;
     } else if (s.darkMode !== undefined) {
@@ -383,6 +466,12 @@
     }
     if (typeof s.textFont === 'string' && Object.prototype.hasOwnProperty.call(FONT_STACKS, s.textFont)) {
       state.textFont = s.textFont;
+    }
+    if (s.inlineTextScale !== undefined) {
+      const sc = Number(s.inlineTextScale);
+      if (Number.isFinite(sc)) {
+        state.inlineTextScale = Math.max(65, Math.min(140, Math.round(sc / 5) * 5));
+      }
     }
     if (typeof s.textLineHeight === 'string' && Object.prototype.hasOwnProperty.call(LINE_HEIGHT_VALUES, s.textLineHeight)) {
       state.textLineHeight = s.textLineHeight;
@@ -415,20 +504,27 @@
   }
 
   function getSyncedSettingsSnapshot(src = state) {
+    const cleanCustom = sanitizeCustomTheme(src.customTheme || DEFAULT_CUSTOM_THEME);
     const resolvedTheme = (typeof src.theme === 'string' && Object.prototype.hasOwnProperty.call(THEMES, src.theme))
       ? src.theme
       : (src.darkMode ? 'midnight' : DEFAULT_SETTINGS.theme);
+    const rawScale = Number(src.inlineTextScale);
+    const resolvedInlineScale = Number.isFinite(rawScale)
+      ? Math.max(65, Math.min(140, Math.round(rawScale / 5) * 5))
+      : DEFAULT_SETTINGS.inlineTextScale;
     return {
       textFont: src.textFont ?? DEFAULT_SETTINGS.textFont,
+      inlineTextScale: resolvedInlineScale,
       textLineHeight: src.textLineHeight ?? DEFAULT_SETTINGS.textLineHeight,
       theme: resolvedTheme,
-      lastLightTheme: (typeof src.lastLightTheme === 'string' && THEMES[src.lastLightTheme] && !THEMES[src.lastLightTheme].isDark)
+      customTheme: cleanCustom,
+      lastLightTheme: (typeof src.lastLightTheme === 'string' && Object.prototype.hasOwnProperty.call(THEMES, src.lastLightTheme) && !isThemeKeyDark(src.lastLightTheme, cleanCustom))
         ? src.lastLightTheme
         : DEFAULT_SETTINGS.lastLightTheme,
-      lastDarkTheme: (typeof src.lastDarkTheme === 'string' && THEMES[src.lastDarkTheme] && THEMES[src.lastDarkTheme].isDark)
+      lastDarkTheme: (typeof src.lastDarkTheme === 'string' && Object.prototype.hasOwnProperty.call(THEMES, src.lastDarkTheme) && isThemeKeyDark(src.lastDarkTheme, cleanCustom))
         ? src.lastDarkTheme
         : DEFAULT_SETTINGS.lastDarkTheme,
-      darkMode: Boolean(THEMES[resolvedTheme]?.isDark),
+      darkMode: isThemeKeyDark(resolvedTheme, cleanCustom),
       boardPattern: src.boardPattern ?? DEFAULT_SETTINGS.boardPattern,
       boardWidth: src.boardWidth ?? DEFAULT_SETTINGS.boardWidth,
       zoomIndex: typeof src.zoomIndex === 'number' ? src.zoomIndex : DEFAULT_SETTINGS.zoomIndex,
@@ -458,12 +554,25 @@
         type: 'apartat',
         label: b.label || '',
         accent: b.accent || 'none',
-        items: (b.items || []).map(it => ({
-          id: uid('it'),
-          kind: it.kind || 'math',
-          latex: it.latex || '',
-          text: it.text || ''
-        }))
+        items: (b.items || []).map(it => {
+          if (it.kind === 'image') {
+            return {
+              id: uid('it'),
+              kind: 'image',
+              src: it.src || '',
+              widthPct: Number(it.widthPct) || 60,
+              naturalW: Number(it.naturalW) || 760,
+              naturalH: Number(it.naturalH) || 340,
+              caption: it.caption || ''
+            };
+          }
+          return {
+            id: uid('it'),
+            kind: it.kind || 'math',
+            latex: it.latex || '',
+            text: it.text || ''
+          };
+        })
       };
     });
   }
@@ -529,7 +638,7 @@
     };
   }
 
-  const TOUR_VERSION = 5;
+  const TOUR_VERSION = 6;
 
   function migrateLegacyStarterTitles(notebooks) {
     let changed = false;
@@ -787,16 +896,11 @@
       chevron.style.color = 'var(--text-muted)';
       chevron.textContent = isExpanded ? '▾' : '▸';
 
-      const dot = document.createElement('span');
-      dot.className = 'nb-color-dot';
-      dot.style.background = nb.color || '#2563eb';
-
       const nameSpan = document.createElement('span');
       nameSpan.className = 'nb-name-text';
       nameSpan.textContent = nb.title;
 
       titleWrap.appendChild(chevron);
-      titleWrap.appendChild(dot);
       titleWrap.appendChild(nameSpan);
       header.appendChild(titleWrap);
 
@@ -1062,6 +1166,41 @@
   // ============================================================================
   // 4. Renderitzat de la Pissarra: Seccions (§) i Apartats Multilínia
   // ============================================================================
+  // Full d'estil compartit per propagar la mida i font del text amb cometes (" -> \text{...}) dins el Shadow DOM de MathLive
+  let sharedMathfieldSheet = null;
+  const MATHFIELD_INLINE_TEXT_CSS = `
+    .ML__text {
+      font-family: var(--text-font-family, system-ui, sans-serif) !important;
+      font-size: var(--inline-text-scale, 1em) !important;
+    }
+    .ML__text .ML__text {
+      font-size: 1em !important;
+    }
+  `;
+
+  function injectMathfieldShadowStyles(mf) {
+    try {
+      const sr = mf && mf.shadowRoot;
+      if (!sr) return;
+      if (sr.adoptedStyleSheets && typeof CSSStyleSheet === 'function') {
+        if (!sharedMathfieldSheet) {
+          sharedMathfieldSheet = new CSSStyleSheet();
+          sharedMathfieldSheet.replaceSync(MATHFIELD_INLINE_TEXT_CSS);
+        }
+        if (!sr.adoptedStyleSheets.includes(sharedMathfieldSheet)) {
+          sr.adoptedStyleSheets = [...sr.adoptedStyleSheets, sharedMathfieldSheet];
+        }
+        return;
+      }
+      if (!sr.querySelector('style[data-aritmetic-ml]')) {
+        const st = document.createElement('style');
+        st.setAttribute('data-aritmetic-ml', '1');
+        st.textContent = MATHFIELD_INLINE_TEXT_CSS;
+        sr.appendChild(st);
+      }
+    } catch (_e) { /* seguretat */ }
+  }
+
   function configureMathfield(mf, block, item) {
     mf.className = 'equation-field';
     mf.mathVirtualKeyboardPolicy = 'manual';
@@ -1074,6 +1213,7 @@
 
     const applyShortcutsAndTab = () => {
       try {
+        injectMathfieldShadowStyles(mf);
         mf.mathModeSpace = '\\;';
         mf.inlineShortcuts = {
           ...mf.inlineShortcuts,
@@ -2899,7 +3039,9 @@
 
       // Dibuixa els punts extrems ○ (oberts) i ● (plens) als punts frontera de les funcions a trossos!
       if (bps.length > 0) {
-        const boardBg = THEMES[state.theme]?.boardBg || (isDark ? '#111a2e' : '#ffffff');
+        const boardBg = state.theme === 'custom'
+          ? sanitizeCustomTheme(state.customTheme).boardBg
+          : (THEMES[state.theme]?.boardBg || (isDark ? '#111a2e' : '#ffffff'));
         const allDots = bps.flatMap(b => b.dots || []);
         // Primer els punts buits ○, després els plens ● a sobre per claredat
         allDots.filter(d => !d.filled).forEach(dot => {
@@ -3664,18 +3806,107 @@
   }
 
   // ============================================================================
-  // 10. Configuració, Tipografia, Tema, Zoom, Panells i Esdeveniments
+  // 10. Configuració, Tipografia, Tema (6 predefinits + Personalitzat), Zoom i Esdeveniments
   // ============================================================================
+  const CUSTOM_THEME_CSS_VARS = [
+    '--bg-app', '--bg-board', '--bg-row-hover', '--bg-row-active',
+    '--bg-text-block', '--bg-section', '--bg-panel', '--bg-sidebar',
+    '--bg-keypad', '--bg-keypad-bar',
+    '--text-primary', '--text-secondary', '--text-muted',
+    '--border-subtle', '--border-strong',
+    '--accent-blue', '--accent-blue-soft',
+    '--key-bg', '--key-bg-num', '--key-bg-op', '--key-hover',
+    '--pattern-line', '--pattern-dot', '--active-btn-fg'
+  ];
+
+  function applyCustomThemeCssVars(rawCt) {
+    const ct = sanitizeCustomTheme(rawCt);
+    const isDark = isCustomThemeDark(ct);
+    const accRgb = hexToRgb(ct.accentColor);
+    const txtRgb = hexToRgb(ct.textPrimary);
+    const st = document.body.style;
+
+    st.setProperty('--bg-app', ct.appBg);
+    st.setProperty('--bg-board', ct.boardBg);
+    st.setProperty('--bg-row-hover', mixHexColors(ct.boardBg, ct.accentColor, isDark ? 0.09 : 0.04));
+    st.setProperty('--bg-row-active', mixHexColors(ct.boardBg, ct.accentColor, isDark ? 0.14 : 0.07));
+    st.setProperty('--bg-text-block', mixHexColors(ct.boardBg, ct.appBg, 0.55));
+    st.setProperty('--bg-section', mixHexColors(ct.appBg, ct.textPrimary, isDark ? 0.08 : 0.04));
+    st.setProperty('--bg-panel', mixHexColors(ct.boardBg, ct.appBg, 0.3));
+    st.setProperty('--bg-sidebar', mixHexColors(ct.appBg, ct.boardBg, 0.35));
+    st.setProperty('--bg-keypad', ct.keypadBg);
+    st.setProperty('--bg-keypad-bar', mixHexColors(ct.keypadBg, ct.textPrimary, isDark ? 0.09 : 0.06));
+
+    st.setProperty('--text-primary', ct.textPrimary);
+    st.setProperty('--text-secondary', mixHexColors(ct.textPrimary, ct.boardBg, 0.36));
+    st.setProperty('--text-muted', mixHexColors(ct.textPrimary, ct.boardBg, 0.58));
+
+    st.setProperty('--border-subtle', mixHexColors(ct.boardBg, ct.textPrimary, isDark ? 0.16 : 0.12));
+    st.setProperty('--border-strong', mixHexColors(ct.boardBg, ct.textPrimary, isDark ? 0.26 : 0.22));
+
+    st.setProperty('--accent-blue', ct.accentColor);
+    st.setProperty('--accent-blue-soft', `rgba(${accRgb.r}, ${accRgb.g}, ${accRgb.b}, ${isDark ? 0.18 : 0.12})`);
+
+    st.setProperty('--key-bg', isDark ? mixHexColors(ct.keypadBg, '#ffffff', 0.09) : mixHexColors(ct.boardBg, '#ffffff', 0.65));
+    st.setProperty('--key-bg-num', mixHexColors(ct.keypadBg, ct.textPrimary, isDark ? 0.13 : 0.08));
+    st.setProperty('--key-bg-op', mixHexColors(ct.keypadBg, ct.boardBg, 0.5));
+    st.setProperty('--key-hover', mixHexColors(ct.keypadBg, ct.accentColor, 0.14));
+
+    st.setProperty('--pattern-line', `rgba(${txtRgb.r}, ${txtRgb.g}, ${txtRgb.b}, ${isDark ? 0.08 : 0.06})`);
+    st.setProperty('--pattern-dot', `rgba(${txtRgb.r}, ${txtRgb.g}, ${txtRgb.b}, ${isDark ? 0.20 : 0.15})`);
+    st.setProperty('--active-btn-fg', getRelativeLuminance(ct.accentColor) > 0.45 ? '#090d16' : '#ffffff');
+  }
+
+  function clearCustomThemeCssVars() {
+    const st = document.body.style;
+    CUSTOM_THEME_CSS_VARS.forEach(prop => st.removeProperty(prop));
+  }
+
   function updateSettingsModalUI() {
     // 1. Targetes de tipografia
     document.querySelectorAll('#settingsFontGrid .font-choice-card').forEach(card => {
       card.classList.toggle('active', card.dataset.font === state.textFont);
     });
 
-    // 2. Targetes del Selector de Temes
+    // 2. Targetes del Selector de Temes + Vista prèvia i panell del Tema Personalitzat
     document.querySelectorAll('#settingsThemeGrid .theme-choice-card').forEach(card => {
       card.classList.toggle('active', card.dataset.themeChoice === state.theme);
     });
+
+    const ct = sanitizeCustomTheme(state.customTheme);
+    const customPanel = document.getElementById('customThemePanel');
+    if (customPanel) {
+      customPanel.style.display = state.theme === 'custom' ? 'flex' : 'none';
+    }
+
+    const swPrev = document.getElementById('customThemeSwatchPreview');
+    const swBar = document.getElementById('customThemeSwatchBar');
+    const swDot = document.getElementById('customThemeSwatchDot');
+    const swInk = document.getElementById('customThemeSwatchInk');
+    if (swPrev) {
+      swPrev.style.background = ct.boardBg;
+      swPrev.style.borderColor = mixHexColors(ct.boardBg, ct.textPrimary, 0.24);
+    }
+    if (swBar) swBar.style.background = ct.appBg;
+    if (swDot) swDot.style.background = ct.accentColor;
+    if (swInk) swInk.style.color = ct.textPrimary;
+
+    const colorBindings = [
+      ['customColBoard', 'customHexBoard', ct.boardBg],
+      ['customColApp', 'customHexApp', ct.appBg],
+      ['customColText', 'customHexText', ct.textPrimary],
+      ['customColAccent', 'customHexAccent', ct.accentColor],
+      ['customColKeypad', 'customHexKeypad', ct.keypadBg]
+    ];
+    colorBindings.forEach(([inpId, hexId, val]) => {
+      const inp = document.getElementById(inpId);
+      const lbl = document.getElementById(hexId);
+      if (inp && inp.value.toLowerCase() !== val) inp.value = val;
+      if (lbl) lbl.textContent = val;
+    });
+
+    const inlineScaleLbl = document.getElementById('settingsInlineTextScaleVal');
+    if (inlineScaleLbl) inlineScaleLbl.textContent = `${state.inlineTextScale || 100}%`;
 
     // 3. Controls segmentats
     document.querySelectorAll('#settingsModal .seg-control[data-setting]').forEach(ctrl => {
@@ -3691,23 +3922,30 @@
     const themeKey = (typeof state.theme === 'string' && Object.prototype.hasOwnProperty.call(THEMES, state.theme))
       ? state.theme
       : (state.darkMode ? 'midnight' : 'classic');
-    const themeMeta = THEMES[themeKey];
     state.theme = themeKey;
-    state.darkMode = Boolean(themeMeta.isDark);
+    state.customTheme = sanitizeCustomTheme(state.customTheme);
+    state.darkMode = isThemeKeyDark(themeKey, state.customTheme);
 
     document.body.dataset.theme = themeKey;
     document.body.classList.toggle('dark-theme', state.darkMode);
+    if (themeKey === 'custom') {
+      applyCustomThemeCssVars(state.customTheme);
+    } else {
+      clearCustomThemeCssVars();
+    }
     const themeBtn = document.getElementById('btnThemeToggle');
     if (themeBtn) themeBtn.textContent = state.darkMode ? '☀️' : '🌙';
 
-    // Tipografia, interlineat, amplada de pissarra, pauta de fons i numeració
-    // S'assigna tant --font-plain-text com --text-font-family perquè el text amb " (\text{...}) dins MathLive també canviï de font!
+    // Tipografia, escala del text amb cometes ("), interlineat, amplada de pissarra, pauta de fons i numeració
     const fontCss = FONT_STACKS[state.textFont] || FONT_STACKS.jakarta;
     const lhCss = LINE_HEIGHT_VALUES[state.textLineHeight] || LINE_HEIGHT_VALUES.normal;
     const widthCss = BOARD_WIDTH_VALUES[state.boardWidth] || BOARD_WIDTH_VALUES.full;
+    const inlineScalePct = Math.max(65, Math.min(140, Number(state.inlineTextScale) || 100));
+    state.inlineTextScale = inlineScalePct;
 
     document.documentElement.style.setProperty('--font-plain-text', fontCss);
     document.documentElement.style.setProperty('--text-font-family', fontCss);
+    document.documentElement.style.setProperty('--inline-text-scale', `${(inlineScalePct / 100).toFixed(2)}em`);
     document.documentElement.style.setProperty('--text-line-height', lhCss);
     document.documentElement.style.setProperty('--board-max-width', widthCss);
 
@@ -4023,12 +4261,24 @@
       });
     });
 
+    const changeInlineTextScaleBy = (deltaPct) => {
+      const cur = Number(state.inlineTextScale) || 100;
+      const next = Math.max(65, Math.min(140, Math.round((cur + deltaPct) / 5) * 5));
+      if (next !== cur) {
+        state.inlineTextScale = next;
+        saveState({ contentChanged: true, skipPageTimestamp: true });
+        applyThemeAndZoom();
+      }
+    };
+    document.getElementById('btnInlineTextScaleOut')?.addEventListener('click', () => changeInlineTextScaleBy(-5));
+    document.getElementById('btnInlineTextScaleIn')?.addEventListener('click', () => changeInlineTextScaleBy(5));
+
     document.querySelectorAll('#settingsThemeGrid .theme-choice-card').forEach(card => {
       card.addEventListener('click', () => {
         const themeKey = card.dataset.themeChoice;
         if (themeKey && Object.prototype.hasOwnProperty.call(THEMES, themeKey)) {
           state.theme = themeKey;
-          state.darkMode = Boolean(THEMES[themeKey].isDark);
+          state.darkMode = isThemeKeyDark(themeKey, state.customTheme);
           if (state.darkMode) state.lastDarkTheme = themeKey;
           else state.lastLightTheme = themeKey;
           saveState({ contentChanged: true, skipPageTimestamp: true });
@@ -4036,6 +4286,50 @@
           if (state.graphOpen) drawGraphCanvas();
         }
       });
+    });
+
+    let customColorSaveTimer = null;
+    const customColorPickers = [
+      ['customColBoard', 'boardBg'],
+      ['customColApp', 'appBg'],
+      ['customColText', 'textPrimary'],
+      ['customColAccent', 'accentColor'],
+      ['customColKeypad', 'keypadBg']
+    ];
+    customColorPickers.forEach(([inpId, propKey]) => {
+      const inp = document.getElementById(inpId);
+      if (!inp) return;
+      const onColorPick = (flushImmediately = false) => {
+        const nextHex = normalizeHex6(inp.value, state.customTheme[propKey]);
+        state.customTheme = sanitizeCustomTheme({ ...state.customTheme, [propKey]: nextHex });
+        state.theme = 'custom';
+        state.darkMode = isCustomThemeDark(state.customTheme);
+        if (state.darkMode) state.lastDarkTheme = 'custom';
+        else state.lastLightTheme = 'custom';
+        applyThemeAndZoom();
+        if (state.graphOpen) drawGraphCanvas();
+
+        if (customColorSaveTimer) clearTimeout(customColorSaveTimer);
+        if (flushImmediately) {
+          saveState({ contentChanged: true, skipPageTimestamp: true });
+        } else {
+          customColorSaveTimer = setTimeout(() => {
+            saveState({ contentChanged: true, skipPageTimestamp: true });
+          }, 350);
+        }
+      };
+      inp.addEventListener('input', () => onColorPick(false));
+      inp.addEventListener('change', () => onColorPick(true));
+    });
+
+    document.getElementById('btnResetCustomTheme')?.addEventListener('click', () => {
+      state.customTheme = { ...DEFAULT_CUSTOM_THEME };
+      state.theme = 'custom';
+      state.darkMode = isCustomThemeDark(state.customTheme);
+      state.lastLightTheme = 'custom';
+      saveState({ contentChanged: true, skipPageTimestamp: true });
+      applyThemeAndZoom();
+      if (state.graphOpen) drawGraphCanvas();
     });
 
     document.querySelectorAll('#settingsModal .seg-control[data-setting]').forEach(ctrl => {
