@@ -1,7 +1,16 @@
 /**
  * cloud-drive.js
- * Sincronització privada i gratuïta de Llibretes amb Google Drive (appDataFolder)
+ * Sincronització privada i gratuïta de Llibretes i Configuració amb Google Drive (`appDataFolder`)
  * mitjançant Google Identity Services (OAuth 2.0 en navegador, Zero-Knowledge: cap servidor intermedi).
+ *
+ * PROTOCOL DE SINCRONITZACIÓ (resum per a manteniment i agents):
+ * - Desa un únic fitxer JSON ocult (`pissarra_workspace_v2.json`) dins l'espai privat `appDataFolder` de l'usuari.
+ * - `AUTO_SYNC_DEBOUNCE_MS` agrupa canvis ràpids (escriptura d'equacions, traços, imatges o temes) abans de fer PUT.
+ * - En connectar o tornar a la pestanya (`visibilitychange`), compara `lastCloudModifiedTime` i l'empremta
+ *   `PissarraApp.getNotebooksFingerprint()` (que cobreix tant llibretes/imatges com `settings`).
+ * - Si hi ha divergència real entre núvol i dispositiu local (i cap dels dos és la plantilla inicial verge),
+ *   presenta el modal `#cloudConflictModal` amb 3 opcions segures: Usar Drive, Pujar Local o Combinar Llibretes.
+ * - IMPORTANT: No modifiqueu mai `CLOUD_FILE_NAME` ni `AUTH_STORAGE_KEY` per preservar les dades existents.
  */
 (function () {
   'use strict';

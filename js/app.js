@@ -3,10 +3,11 @@
  * Aritmètic — Pissarra i Càlcul Matemàtic:
  * - Sistema jeràrquic de Llibretes i Pàgines amb persistència automàtica i sincronització amb Google Drive.
  * - Exportació i importació en fitxer (.json) de tot l'espai, d'una llibreta o d'una pàgina individual + còpia LaTeX + PDF.
- * - Estructura d'APARTATS multilínia que combinen múltiples línies d'equacions (<math-field>) i blocs de text amb salt de línia automàtic.
- * - Configuració completa personalitzable (tipografies, pauta de fons, amplada, format numèric, precisió, PDF) sincronitzada al núvol.
+ * - Estructura d'APARTATS multilínia que combinen equacions (<math-field>), blocs de text i imatges redimensionables.
+ * - Selector de temes clars/foscos i configuració completa (tipografies, pauta, amplada, format numèric, precisió, PDF) sincronitzada al núvol.
  * - Scoreboard de Variables i Funcions amb 3 àmbits (Apartat actual / Exercici / Tota la pàgina).
  * - Gràfica cartesiana interactiva (zoom/pan amb ratolí i tàctil), Punter Làser efímer, Llapis lliure i Temporitzador.
+ * - Consulteu `AGENTS.md` a l'arrel del projecte per a la documentació arquitectònica completa.
  */
 (function () {
   'use strict';
@@ -40,9 +41,22 @@
     reading: '820px'
   };
 
+  // Catàleg de temes visuals d'Aritmètic (3 clars + 3 foscos)
+  const THEMES = {
+    classic: { label: 'Clàssic Blanc', isDark: false, boardBg: '#ffffff' },
+    paper: { label: 'Paper Càlid', isDark: false, boardBg: '#fcfaf4' },
+    sage: { label: 'Sàlvia Suau', isDark: false, boardBg: '#f7fbf9' },
+    midnight: { label: 'Nit Blava', isDark: true, boardBg: '#111a2e' },
+    chalkboard: { label: "Pissarra d'Aula", isDark: true, boardBg: '#14281d' },
+    carbon: { label: 'Carbó OLED', isDark: true, boardBg: '#121215' }
+  };
+
   const DEFAULT_SETTINGS = {
     textFont: 'jakarta',
     textLineHeight: 'normal',
+    theme: 'classic',
+    lastLightTheme: 'classic',
+    lastDarkTheme: 'midnight',
     darkMode: false,
     boardPattern: 'plain',
     boardWidth: 'full',
@@ -72,6 +86,9 @@
     notebooksSidebarOpen: true,
     scoreboardCollapsed: false,
     keypadCollapsed: false,
+    theme: DEFAULT_SETTINGS.theme,
+    lastLightTheme: DEFAULT_SETTINGS.lastLightTheme,
+    lastDarkTheme: DEFAULT_SETTINGS.lastDarkTheme,
     darkMode: DEFAULT_SETTINGS.darkMode,
     zoomIndex: DEFAULT_SETTINGS.zoomIndex,
 
@@ -112,6 +129,9 @@
   // Referències vives als elements d'edició per no destruir el DOM mentre s'escriu
   const mathfieldMap = new Map(); // itemId -> MathfieldElement
   const textareaMap = new Map();  // itemId -> HTMLTextAreaElement
+  const imageCaptionMap = new Map(); // itemId -> HTMLInputElement
+  let pendingImageTarget = { blockId: null, afterItemId: null };
+  let lastQuotaWarningAt = 0;
   let analysisTimer = null;
   let lastAnalysis = { variables: [], functions: [], lineQuickResults: {} };
   let laserAnimFrame = null;
@@ -217,6 +237,16 @@
     return out;
   }
 
+  // Només s'admeten data URLs raster segures (excloent explícitament image/svg+xml per prevenir XSS via SVG)
+  function isSafeImageDataUrl(src) {
+    return (
+      typeof src === 'string' &&
+      src.length > 32 &&
+      src.length <= 3200000 &&
+      /^data:image\/(webp|jpeg|png|gif);base64,[A-Za-z0-9+/=]+$/.test(src)
+    );
+  }
+
   function sanitizeBlocksList(rawBlocks) {
     const allowedAccents = new Set(['none', 'green', 'blue', 'amber']);
     const blocks = [];
@@ -245,6 +275,21 @@
                 id: iId,
                 kind: 'text',
                 text: typeof it.text === 'string' ? it.text.slice(0, 30000) : ''
+              });
+            } else if (it.kind === 'image') {
+              if (!isSafeImageDataUrl(it.src)) continue;
+              const rawW = Number(it.widthPct);
+              const widthPct = Number.isFinite(rawW) ? Math.max(15, Math.min(100, Math.round(rawW))) : 58;
+              const natW = Number(it.naturalW);
+              const natH = Number(it.naturalH);
+              items.push({
+                id: iId,
+                kind: 'image',
+                src: it.src,
+                widthPct,
+                naturalW: Number.isFinite(natW) && natW > 0 ? Math.min(8000, Math.round(natW)) : 0,
+                naturalH: Number.isFinite(natH) && natH > 0 ? Math.min(8000, Math.round(natH)) : 0,
+                caption: typeof it.caption === 'string' ? it.caption.slice(0, 400) : ''
               });
             } else {
               items.push({
@@ -315,7 +360,24 @@
     if (s.scoreboardScope === 'apartat' || s.scoreboardScope === 'section' || s.scoreboardScope === 'page') {
       state.scoreboardScope = s.scoreboardScope;
     }
-    if (s.darkMode !== undefined) state.darkMode = Boolean(s.darkMode);
+
+    if (typeof s.lastLightTheme === 'string' && THEMES[s.lastLightTheme] && !THEMES[s.lastLightTheme].isDark) {
+      state.lastLightTheme = s.lastLightTheme;
+    }
+    if (typeof s.lastDarkTheme === 'string' && THEMES[s.lastDarkTheme] && THEMES[s.lastDarkTheme].isDark) {
+      state.lastDarkTheme = s.lastDarkTheme;
+    }
+
+    if (typeof s.theme === 'string' && Object.prototype.hasOwnProperty.call(THEMES, s.theme)) {
+      state.theme = s.theme;
+      state.darkMode = THEMES[s.theme].isDark;
+      if (state.darkMode) state.lastDarkTheme = s.theme;
+      else state.lastLightTheme = s.theme;
+    } else if (s.darkMode !== undefined) {
+      state.darkMode = Boolean(s.darkMode);
+      state.theme = state.darkMode ? (state.lastDarkTheme || 'midnight') : (state.lastLightTheme || 'classic');
+    }
+
     if (typeof s.zoomIndex === 'number' && Number.isInteger(s.zoomIndex)) {
       state.zoomIndex = Math.max(0, Math.min(ZOOM_MATH_SIZES.length - 1, s.zoomIndex));
     }
@@ -353,10 +415,20 @@
   }
 
   function getSyncedSettingsSnapshot(src = state) {
+    const resolvedTheme = (typeof src.theme === 'string' && Object.prototype.hasOwnProperty.call(THEMES, src.theme))
+      ? src.theme
+      : (src.darkMode ? 'midnight' : DEFAULT_SETTINGS.theme);
     return {
       textFont: src.textFont ?? DEFAULT_SETTINGS.textFont,
       textLineHeight: src.textLineHeight ?? DEFAULT_SETTINGS.textLineHeight,
-      darkMode: Boolean(src.darkMode ?? DEFAULT_SETTINGS.darkMode),
+      theme: resolvedTheme,
+      lastLightTheme: (typeof src.lastLightTheme === 'string' && THEMES[src.lastLightTheme] && !THEMES[src.lastLightTheme].isDark)
+        ? src.lastLightTheme
+        : DEFAULT_SETTINGS.lastLightTheme,
+      lastDarkTheme: (typeof src.lastDarkTheme === 'string' && THEMES[src.lastDarkTheme] && THEMES[src.lastDarkTheme].isDark)
+        ? src.lastDarkTheme
+        : DEFAULT_SETTINGS.lastDarkTheme,
+      darkMode: Boolean(THEMES[resolvedTheme]?.isDark),
       boardPattern: src.boardPattern ?? DEFAULT_SETTINGS.boardPattern,
       boardWidth: src.boardWidth ?? DEFAULT_SETTINGS.boardWidth,
       zoomIndex: typeof src.zoomIndex === 'number' ? src.zoomIndex : DEFAULT_SETTINGS.zoomIndex,
@@ -457,7 +529,7 @@
     };
   }
 
-  const TOUR_VERSION = 4;
+  const TOUR_VERSION = 5;
 
   function migrateLegacyStarterTitles(notebooks) {
     let changed = false;
@@ -548,8 +620,8 @@
   }
 
   function saveState(opts = {}) {
+    const contentChanged = opts.contentChanged !== false;
     try {
-      const contentChanged = opts.contentChanged !== false;
       const page = getActivePage();
       if (page && contentChanged && !opts.skipPageTimestamp && !opts.fromCloud && !opts.isInitialSeed) {
         page.updatedAt = Date.now();
@@ -559,12 +631,21 @@
       if (!opts.silentPill) {
         flashAutosaveIndicator(opts.pillMessage);
       }
-      if (!opts.fromCloud && !opts.isInitialSeed) {
-        localSaveListeners.forEach((fn) => {
-          try { fn({ contentChanged }); } catch (_err) { /* seguretat */ }
-        });
+    } catch (err) {
+      const isQuota = err && (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED' || err.code === 22);
+      if (isQuota && Date.now() - lastQuotaWarningAt > 15000) {
+        lastQuotaWarningAt = Date.now();
+        alert(
+          "L'emmagatzematge local del navegador (~5 MB) s'ha omplert (probablement per moltes imatges grans).\n\n" +
+          "Consell: Connecta Google Drive (☁️ Drive) o baixa una còpia .json des de 💾 per no perdre res, i elimina captures antigues que ja no necessitis."
+        );
       }
-    } catch (_e) { /* ignora quota */ }
+    }
+    if (!opts.fromCloud && !opts.isInitialSeed) {
+      localSaveListeners.forEach((fn) => {
+        try { fn({ contentChanged }); } catch (_err) { /* seguretat */ }
+      });
+    }
   }
 
   let autosaveTimeout = null;
@@ -1178,6 +1259,327 @@
     }
   }
 
+  // ============================================================================
+  // 4b. Compressió Client-Side i Mida Intel·ligent d'Imatges dins d'Apartats
+  // ============================================================================
+  function computeSmartInitialImageWidthPct(natW, natH) {
+    const boardEl = document.getElementById('blocksList');
+    const availW = Math.max(320, (boardEl?.clientWidth || 780) - 90);
+    // Les captures Retina (~2x) tenen molta densitat de píxels; les retallades petites es mantenen compactes
+    let idealCssPx = natW >= 850 ? natW * 0.52 : natW * 0.72;
+    // Si la imatge és molt vertical, limitem l'alçada inicial (~340px) perquè no acapari tota la pissarra
+    if (natH > 0 && natH > natW * 1.1) {
+      const maxInitialHeightPx = 340;
+      idealCssPx = Math.min(idealCssPx, maxInitialHeightPx * (natW / natH));
+    }
+    const pct = Math.round((idealCssPx / availW) * 100);
+    return Math.max(22, Math.min(92, pct));
+  }
+
+  function compressImageFileToPayload(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || typeof file.type !== 'string' || !/^image\/(png|jpeg|jpg|webp|gif)$/i.test(file.type)) {
+        reject(new Error('Format no admès. Usa imatges PNG, JPEG, WebP o GIF.'));
+        return;
+      }
+      if (file.size > 25 * 1024 * 1024) {
+        reject(new Error('La imatge supera el límit màxim de 25 MB.'));
+        return;
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        try {
+          const natW = Math.max(1, img.naturalWidth || img.width || 400);
+          const natH = Math.max(1, img.naturalHeight || img.height || 300);
+
+          const MAX_W = 1400;
+          const MAX_H = 1200;
+          const scale = Math.min(1, MAX_W / natW, MAX_H / natH);
+          const outW = Math.max(1, Math.round(natW * scale));
+          const outH = Math.max(1, Math.round(natH * scale));
+
+          const canvas = document.createElement('canvas');
+          canvas.width = outW;
+          canvas.height = outH;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('No s\'ha pogut preparar el llenç d\'imatge.');
+
+          // Fons blanc net per a captures amb transparència (optimitza pes i llegibilitat en tots els temes)
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, outW, outH);
+          ctx.drawImage(img, 0, 0, outW, outH);
+
+          let dataUrl = canvas.toDataURL('image/webp', 0.82);
+          if (!dataUrl.startsWith('data:image/webp') || dataUrl.length > 2400000) {
+            dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          }
+          if (dataUrl.length > 2400000) {
+            dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+          }
+          if (!isSafeImageDataUrl(dataUrl)) {
+            throw new Error('La imatge resultant és massa pesada per desar-la.');
+          }
+
+          resolve({
+            src: dataUrl,
+            naturalW: natW,
+            naturalH: natH,
+            widthPct: computeSmartInitialImageWidthPct(natW, natH)
+          });
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('No s\'ha pogut llegir el fitxer d\'imatge.'));
+      };
+      img.src = objectUrl;
+    });
+  }
+
+  async function addImageFileToApartat(file, targetBlockId, afterItemId) {
+    try {
+      const imgData = await compressImageFileToPayload(file);
+      const page = getActivePage();
+      if (!page) return;
+
+      let block = page.blocks.find(b => b.id === targetBlockId && b.type === 'apartat');
+      if (!block) {
+        block = page.blocks.find(b => b.type === 'apartat');
+      }
+      if (!block) {
+        block = createEmptyApartat('math');
+        page.blocks.push(block);
+      }
+
+      const newImgItem = {
+        id: uid('it'),
+        kind: 'image',
+        src: imgData.src,
+        widthPct: imgData.widthPct,
+        naturalW: imgData.naturalW,
+        naturalH: imgData.naturalH,
+        caption: ''
+      };
+
+      // Si l'apartat acaba de ser creat i només té una equació en blanc, posem la imatge d'enunciat a dalt
+      // i deixem l'equació en blanc just a sota llesta per començar a resoldre!
+      const isSingleBlankMath =
+        block.items.length === 1 &&
+        block.items[0].kind === 'math' &&
+        !(block.items[0].latex || '').trim();
+
+      let focusTargetId = newImgItem.id;
+      if (isSingleBlankMath) {
+        block.items.unshift(newImgItem);
+        focusTargetId = block.items[1].id;
+      } else {
+        const idx = block.items.findIndex(it => it.id === afterItemId);
+        if (idx === -1) block.items.push(newImgItem);
+        else block.items.splice(idx + 1, 0, newImgItem);
+      }
+
+      state.activeBlockId = block.id;
+      state.activeItemId = focusTargetId;
+      saveState({ pillMessage: 'Imatge afegida ✓' });
+      renderBoardBlocks();
+      requestAnimationFrame(() => focusItemById(focusTargetId, 'end'));
+    } catch (err) {
+      alert(err && err.message ? err.message : 'No s\'ha pogut inserir la imatge.');
+    }
+  }
+
+  function openImagePickerForApartat(blockId, afterItemId) {
+    const inp = document.getElementById('apartatImageInput');
+    if (!inp) return;
+    pendingImageTarget = { blockId, afterItemId };
+    inp.value = '';
+    inp.click();
+  }
+
+  function buildApartatImageElement(block, item) {
+    const iWrap = document.createElement('div');
+    iWrap.className = `apartat-image-item ${item.id === state.activeItemId ? 'active-subitem' : ''}`;
+    iWrap.dataset.itemId = item.id;
+
+    const card = document.createElement('div');
+    card.className = 'apartat-image-card';
+
+    const stage = document.createElement('div');
+    stage.className = 'apartat-image-stage';
+    const curPct = Math.max(15, Math.min(100, Number(item.widthPct) || 58));
+    stage.style.setProperty('--img-width-pct', `${curPct}%`);
+
+    stage.addEventListener('mousedown', () => {
+      setActiveBlockAndItem(block.id, item.id, false);
+    });
+
+    const imgEl = document.createElement('img');
+    imgEl.className = 'apartat-image-el';
+    imgEl.src = item.src;
+    imgEl.alt = item.caption || 'Imatge d\'apartat';
+    imgEl.loading = 'lazy';
+    imgEl.addEventListener('load', () => {
+      requestAnimationFrame(resizeOverlayCanvases);
+    });
+
+    const sizeBadge = document.createElement('span');
+    sizeBadge.className = 'image-size-badge';
+    sizeBadge.textContent = `${curPct}%`;
+
+    const handle = document.createElement('div');
+    handle.className = 'image-resize-handle';
+    handle.title = 'Arrossega cap a l\'esquerra o la dreta per ajustar la mida de la imatge';
+
+    const metaBar = document.createElement('div');
+    metaBar.className = 'apartat-image-meta-bar';
+
+    const presetsWrap = document.createElement('div');
+    presetsWrap.className = 'image-size-presets';
+    const presetButtons = [];
+
+    const updateWidthPctLive = (nextPct, persist = false) => {
+      const clamped = Math.max(15, Math.min(100, Math.round(nextPct)));
+      item.widthPct = clamped;
+      stage.style.setProperty('--img-width-pct', `${clamped}%`);
+      sizeBadge.textContent = `${clamped}%`;
+      presetButtons.forEach(({ btn, pct }) => {
+        btn.classList.toggle('active', Math.abs(clamped - pct) <= 3);
+      });
+      requestAnimationFrame(resizeOverlayCanvases);
+      if (persist) saveState();
+    };
+
+    [
+      { label: 'S', pct: 35, title: 'Petita (35%)' },
+      { label: 'M', pct: 55, title: 'Mitjana (55%)' },
+      { label: 'L', pct: 75, title: 'Gran (75%)' },
+      { label: '100%', pct: 100, title: 'Amplada completa (100%)' }
+    ].forEach(({ label, pct, title }) => {
+      const pBtn = document.createElement('button');
+      pBtn.type = 'button';
+      pBtn.className = `image-preset-btn ${Math.abs(curPct - pct) <= 3 ? 'active' : ''}`;
+      pBtn.textContent = label;
+      pBtn.title = title;
+      pBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        setActiveBlockAndItem(block.id, item.id, false);
+        updateWidthPctLive(pct, true);
+      });
+      presetButtons.push({ btn: pBtn, pct });
+      presetsWrap.appendChild(pBtn);
+    });
+
+    // Arrossegament fluid (ratolí i pantalles tàctils) per redimensionar la imatge
+    const startResize = (startEv) => {
+      startEv.preventDefault();
+      startEv.stopPropagation();
+      setActiveBlockAndItem(block.id, item.id, false);
+
+      const getClientX = (e) => {
+        if (e.touches && e.touches[0]) return e.touches[0].clientX;
+        if (e.changedTouches && e.changedTouches[0]) return e.changedTouches[0].clientX;
+        return e.clientX;
+      };
+
+      const cardRect = card.getBoundingClientRect();
+      const stageRect = stage.getBoundingClientRect();
+      const availW = Math.max(160, cardRect.width);
+      const startX = getClientX(startEv);
+      const startW = stageRect.width;
+
+      stage.classList.add('is-resizing');
+
+      const onMove = (moveEv) => {
+        if (moveEv.cancelable) moveEv.preventDefault();
+        const dx = getClientX(moveEv) - startX;
+        const newPct = ((startW + dx) / availW) * 100;
+        updateWidthPctLive(newPct, false);
+      };
+
+      const onEnd = () => {
+        stage.classList.remove('is-resizing');
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onEnd);
+        window.removeEventListener('touchmove', onMove);
+        window.removeEventListener('touchend', onEnd);
+        window.removeEventListener('touchcancel', onEnd);
+        saveState();
+      };
+
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onEnd);
+      window.addEventListener('touchmove', onMove, { passive: false });
+      window.addEventListener('touchend', onEnd);
+      window.addEventListener('touchcancel', onEnd);
+    };
+
+    handle.addEventListener('mousedown', startResize);
+    handle.addEventListener('touchstart', startResize, { passive: false });
+
+    const captionInp = document.createElement('input');
+    captionInp.type = 'text';
+    captionInp.className = `apartat-image-caption ${!(item.caption || '').trim() ? 'empty-caption' : ''}`;
+    captionInp.placeholder = 'Peu d\'imatge opcional (ex: Enunciat exercici 2)...';
+    captionInp.value = item.caption || '';
+    captionInp.addEventListener('focus', () => setActiveBlockAndItem(block.id, item.id, false));
+    captionInp.addEventListener('input', () => {
+      item.caption = captionInp.value.slice(0, 400);
+      imgEl.alt = item.caption || 'Imatge d\'apartat';
+      captionInp.classList.toggle('empty-caption', !item.caption.trim());
+      saveState();
+    });
+    captionInp.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        insertItemInApartat(block.id, item.id, 'math');
+      } else if (ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        focusNeighborItem(item.id, -1);
+      } else if (ev.key === 'ArrowDown') {
+        ev.preventDefault();
+        focusNeighborItem(item.id, 1);
+      }
+    });
+    imageCaptionMap.set(item.id, captionInp);
+
+    stage.appendChild(imgEl);
+    stage.appendChild(sizeBadge);
+    stage.appendChild(handle);
+
+    metaBar.appendChild(presetsWrap);
+    metaBar.appendChild(captionInp);
+
+    card.appendChild(stage);
+    card.appendChild(metaBar);
+
+    const subActs = document.createElement('div');
+    subActs.className = 'subitem-actions';
+
+    const toMathBtn = document.createElement('button');
+    toMathBtn.className = 'row-icon-btn';
+    toMathBtn.title = 'Afegir equació just a sota d\'aquesta imatge';
+    toMathBtn.textContent = '∑';
+    toMathBtn.addEventListener('click', () => insertItemInApartat(block.id, item.id, 'math'));
+
+    const delImgBtn = document.createElement('button');
+    delImgBtn.className = 'row-icon-btn delete-btn';
+    delImgBtn.title = 'Eliminar aquesta imatge';
+    delImgBtn.textContent = '✕';
+    delImgBtn.addEventListener('click', () => deleteSubItem(block.id, item.id, false));
+
+    subActs.appendChild(toMathBtn);
+    subActs.appendChild(delImgBtn);
+
+    iWrap.appendChild(card);
+    iWrap.appendChild(subActs);
+    return iWrap;
+  }
+
   function renderBoardBlocks() {
     const container = document.getElementById('blocksList');
     const page = getActivePage();
@@ -1185,6 +1587,7 @@
 
     mathfieldMap.clear();
     textareaMap.clear();
+    imageCaptionMap.clear();
     container.innerHTML = '';
 
     if (!Array.isArray(page.blocks) || page.blocks.length === 0) {
@@ -1260,6 +1663,30 @@
       apEl.dataset.blockId = block.id;
       apEl.dataset.accent = block.accent || 'none';
 
+      // Permet arrossegar i deixar anar (Drag & Drop) una captura o imatge directament sobre l'apartat
+      apEl.addEventListener('dragover', (ev) => {
+        if (ev.dataTransfer && Array.from(ev.dataTransfer.types || []).includes('Files')) {
+          ev.preventDefault();
+          apEl.classList.add('drag-over-image');
+        }
+      });
+      apEl.addEventListener('dragleave', (ev) => {
+        if (!apEl.contains(ev.relatedTarget)) {
+          apEl.classList.remove('drag-over-image');
+        }
+      });
+      apEl.addEventListener('drop', (ev) => {
+        apEl.classList.remove('drag-over-image');
+        const files = ev.dataTransfer && ev.dataTransfer.files ? Array.from(ev.dataTransfer.files) : [];
+        const imgFile = files.find(f => f && typeof f.type === 'string' && f.type.startsWith('image/'));
+        if (imgFile) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const lastId = block.items[block.items.length - 1]?.id;
+          addImageFileToApartat(imgFile, block.id, lastId);
+        }
+      });
+
       const gutter = document.createElement('div');
       gutter.className = 'apartat-gutter';
       gutter.textContent = String(apartatNumber);
@@ -1312,6 +1739,15 @@
         insertItemInApartat(block.id, lastId, 'text');
       });
 
+      const btnAddImage = document.createElement('button');
+      btnAddImage.className = 'ap-pill-btn';
+      btnAddImage.title = 'Afegir una imatge o captura d\'exercici dins d\'aquest apartat (o enganxa amb Cmd/Ctrl + V)';
+      btnAddImage.textContent = '+ Imatge';
+      btnAddImage.addEventListener('click', () => {
+        const lastId = block.items[block.items.length - 1]?.id;
+        openImagePickerForApartat(block.id, lastId);
+      });
+
       const btnColor = document.createElement('button');
       btnColor.className = 'row-icon-btn';
       btnColor.title = 'Ressaltar apartat (Verd / Blau / Àmbar / Cap)';
@@ -1338,6 +1774,7 @@
 
       tb.appendChild(btnAddMath);
       tb.appendChild(btnAddText);
+      tb.appendChild(btnAddImage);
       tb.appendChild(btnNewAp);
       tb.appendChild(btnColor);
       tb.appendChild(btnDupAp);
@@ -1386,6 +1823,8 @@
           tWrap.appendChild(ta);
           tWrap.appendChild(subActs);
           itemsWrap.appendChild(tWrap);
+        } else if (item.kind === 'image' && isSafeImageDataUrl(item.src)) {
+          itemsWrap.appendChild(buildApartatImageElement(block, item));
         } else {
           const mWrap = document.createElement('div');
           mWrap.className = `apartat-math-item ${item.id === state.activeItemId ? 'active-subitem' : ''}`;
@@ -1444,7 +1883,7 @@
     document.querySelectorAll('.apartat-block').forEach(el => {
       el.classList.toggle('focused', el.dataset.blockId === blockId);
     });
-    document.querySelectorAll('.apartat-math-item, .apartat-text-item').forEach(el => {
+    document.querySelectorAll('.apartat-math-item, .apartat-text-item, .apartat-image-item').forEach(el => {
       el.classList.toggle('active-subitem', el.dataset.itemId === state.activeItemId);
     });
 
@@ -1467,6 +1906,11 @@
       ta.focus();
       const idx = pos === 'start' ? 0 : ta.value.length;
       ta.setSelectionRange(idx, idx);
+    } else if (imageCaptionMap.has(itemId)) {
+      const cap = imageCaptionMap.get(itemId);
+      cap.focus();
+      const idx = pos === 'start' ? 0 : cap.value.length;
+      cap.setSelectionRange(idx, idx);
     }
   }
 
@@ -2455,7 +2899,7 @@
 
       // Dibuixa els punts extrems ○ (oberts) i ● (plens) als punts frontera de les funcions a trossos!
       if (bps.length > 0) {
-        const boardBg = isDark ? '#111a2e' : '#ffffff';
+        const boardBg = THEMES[state.theme]?.boardBg || (isDark ? '#111a2e' : '#ffffff');
         const allDots = bps.flatMap(b => b.dots || []);
         // Primer els punts buits ○, després els plens ● a sobre per claredat
         allDots.filter(d => !d.filled).forEach(dot => {
@@ -2595,6 +3039,8 @@
         (b.items || []).forEach(it => {
           if (it.kind === 'text' && it.text.trim()) {
             lines.push(`% ${it.text.replace(/\n/g, '\n% ')}`);
+          } else if (it.kind === 'image') {
+            lines.push(`% [Imatge${(it.caption || '').trim() ? `: ${it.caption.trim()}` : ''}]`);
           } else if (it.kind === 'math' && it.latex.trim()) {
             lines.push(`\\[ ${it.latex} \\]`);
           }
@@ -2648,6 +3094,7 @@
         apartatNum++;
         const nonEmptyItems = (block.items || []).filter(it =>
           (it.kind === 'text' && (it.text || '').trim() !== '') ||
+          (it.kind === 'image' && isSafeImageDataUrl(it.src)) ||
           (it.kind === 'math' && (it.latex || '').trim() !== '')
         );
         if (nonEmptyItems.length === 0 && !(block.label || '').trim()) {
@@ -2663,6 +3110,12 @@
         const itemsHtml = nonEmptyItems.map(it => {
           if (it.kind === 'text') {
             return `<div class="print-text-block">${escapeHtml(it.text)}</div>`;
+          }
+          if (it.kind === 'image') {
+            const wPct = Math.max(15, Math.min(100, Number(it.widthPct) || 58));
+            const capTxt = (it.caption || '').trim();
+            const capHtml = capTxt ? `<figcaption class="print-image-caption">${escapeHtml(capTxt)}</figcaption>` : '';
+            return `<figure class="print-image-figure" style="width:${wPct}%;"><img class="print-image-el" src="${it.src}" alt="${escapeHtml(capTxt || 'Imatge')}" />${capHtml}</figure>`;
           }
           return `<div class="print-math-row"><div class="print-math-inner">${renderLatexStatic(it.latex)}</div></div>`;
         }).join('');
@@ -2708,8 +3161,16 @@
 
   function triggerPrintPdf() {
     preparePrintDocument();
-    requestAnimationFrame(() => {
-      window.print();
+    const printEl = document.getElementById('printDocument');
+    const imgs = printEl ? Array.from(printEl.querySelectorAll('img')) : [];
+    if (imgs.length === 0) {
+      requestAnimationFrame(() => window.print());
+      return;
+    }
+    Promise.all(
+      imgs.map(img => (typeof img.decode === 'function' ? img.decode().catch(() => {}) : Promise.resolve()))
+    ).then(() => {
+      requestAnimationFrame(() => window.print());
     });
   }
 
@@ -3211,7 +3672,12 @@
       card.classList.toggle('active', card.dataset.font === state.textFont);
     });
 
-    // 2. Controls segmentats
+    // 2. Targetes del Selector de Temes
+    document.querySelectorAll('#settingsThemeGrid .theme-choice-card').forEach(card => {
+      card.classList.toggle('active', card.dataset.themeChoice === state.theme);
+    });
+
+    // 3. Controls segmentats
     document.querySelectorAll('#settingsModal .seg-control[data-setting]').forEach(ctrl => {
       const key = ctrl.dataset.setting;
       const curVal = String(state[key]);
@@ -3222,16 +3688,26 @@
   }
 
   function applyThemeAndZoom() {
+    const themeKey = (typeof state.theme === 'string' && Object.prototype.hasOwnProperty.call(THEMES, state.theme))
+      ? state.theme
+      : (state.darkMode ? 'midnight' : 'classic');
+    const themeMeta = THEMES[themeKey];
+    state.theme = themeKey;
+    state.darkMode = Boolean(themeMeta.isDark);
+
+    document.body.dataset.theme = themeKey;
     document.body.classList.toggle('dark-theme', state.darkMode);
     const themeBtn = document.getElementById('btnThemeToggle');
     if (themeBtn) themeBtn.textContent = state.darkMode ? '☀️' : '🌙';
 
     // Tipografia, interlineat, amplada de pissarra, pauta de fons i numeració
+    // S'assigna tant --font-plain-text com --text-font-family perquè el text amb " (\text{...}) dins MathLive també canviï de font!
     const fontCss = FONT_STACKS[state.textFont] || FONT_STACKS.jakarta;
     const lhCss = LINE_HEIGHT_VALUES[state.textLineHeight] || LINE_HEIGHT_VALUES.normal;
     const widthCss = BOARD_WIDTH_VALUES[state.boardWidth] || BOARD_WIDTH_VALUES.full;
 
     document.documentElement.style.setProperty('--font-plain-text', fontCss);
+    document.documentElement.style.setProperty('--text-font-family', fontCss);
     document.documentElement.style.setProperty('--text-line-height', lhCss);
     document.documentElement.style.setProperty('--board-max-width', widthCss);
 
@@ -3360,6 +3836,39 @@
       insertItemInApartat(blkId, state.activeItemId, 'text');
     });
 
+    document.getElementById('btnAddImageInApTop')?.addEventListener('click', () => {
+      const page = getActivePage();
+      if (!page) return;
+      const blkId = state.activeBlockId || page.blocks[page.blocks.length - 1]?.id;
+      openImagePickerForApartat(blkId, state.activeItemId);
+    });
+
+    const apartatImgInput = document.getElementById('apartatImageInput');
+    apartatImgInput?.addEventListener('change', () => {
+      const file = apartatImgInput.files && apartatImgInput.files[0];
+      if (!file) return;
+      const page = getActivePage();
+      const blkId = pendingImageTarget.blockId || state.activeBlockId || page?.blocks[page.blocks.length - 1]?.id;
+      const afterId = pendingImageTarget.afterItemId !== undefined ? pendingImageTarget.afterItemId : state.activeItemId;
+      addImageFileToApartat(file, blkId, afterId);
+      apartatImgInput.value = '';
+    });
+
+    // Enganxar captures o imatges directament des del porta-retalls (Cmd/Ctrl + V) dins l'apartat actiu!
+    document.addEventListener('paste', (ev) => {
+      if (document.querySelector('.modal-backdrop.open')) return;
+      const items = ev.clipboardData && ev.clipboardData.items ? Array.from(ev.clipboardData.items) : [];
+      const imgClipItem = items.find(it => it.kind === 'file' && typeof it.type === 'string' && it.type.startsWith('image/'));
+      if (!imgClipItem) return;
+      const blob = imgClipItem.getAsFile();
+      if (!blob) return;
+      ev.preventDefault();
+      const page = getActivePage();
+      if (!page) return;
+      const blkId = state.activeBlockId || page.blocks[page.blocks.length - 1]?.id;
+      addImageFileToApartat(blob, blkId, state.activeItemId);
+    });
+
     document.getElementById('btnAddSectionTop')?.addEventListener('click', () => {
       const page = getActivePage();
       if (!page) return;
@@ -3480,7 +3989,9 @@
     document.getElementById('btnSettingsZoomIn')?.addEventListener('click', () => changeZoomBy(1));
 
     document.getElementById('btnThemeToggle')?.addEventListener('click', () => {
-      state.darkMode = !state.darkMode;
+      const nextDark = !state.darkMode;
+      state.theme = nextDark ? (state.lastDarkTheme || 'midnight') : (state.lastLightTheme || 'classic');
+      state.darkMode = nextDark;
       saveState({ contentChanged: true, skipPageTimestamp: true, silentPill: true });
       applyThemeAndZoom();
       if (state.graphOpen) drawGraphCanvas();
@@ -3508,6 +4019,21 @@
           state.textFont = fontKey;
           saveState({ contentChanged: true, skipPageTimestamp: true });
           applyThemeAndZoom();
+        }
+      });
+    });
+
+    document.querySelectorAll('#settingsThemeGrid .theme-choice-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const themeKey = card.dataset.themeChoice;
+        if (themeKey && Object.prototype.hasOwnProperty.call(THEMES, themeKey)) {
+          state.theme = themeKey;
+          state.darkMode = Boolean(THEMES[themeKey].isDark);
+          if (state.darkMode) state.lastDarkTheme = themeKey;
+          else state.lastLightTheme = themeKey;
+          saveState({ contentChanged: true, skipPageTimestamp: true });
+          applyThemeAndZoom();
+          if (state.graphOpen) drawGraphCanvas();
         }
       });
     });
@@ -3728,11 +4254,21 @@
         type: 'apartat',
         label: b.label || '',
         accent: b.accent || 'none',
-        items: (b.items || []).map(it => ({
-          kind: it.kind || 'math',
-          latex: it.latex || '',
-          text: it.text || ''
-        }))
+        items: (b.items || []).map(it => {
+          if (it.kind === 'image') {
+            return {
+              kind: 'image',
+              src: it.src || '',
+              widthPct: Number(it.widthPct) || 58,
+              caption: it.caption || ''
+            };
+          }
+          return {
+            kind: it.kind || 'math',
+            latex: it.latex || '',
+            text: it.text || ''
+          };
+        })
       };
     });
   }
@@ -3745,6 +4281,7 @@
     if (b.type !== 'apartat' || (b.label || '').trim() !== '') return false;
     if (!Array.isArray(b.items) || b.items.length !== 1) return false;
     const it = b.items[0];
+    if (it.kind === 'image') return false;
     return !(it.latex || '').trim() && !(it.text || '').trim();
   }
 

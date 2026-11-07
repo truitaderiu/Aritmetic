@@ -1,7 +1,14 @@
 /**
  * keypads.js
- * Configuració dels teclats matemàtics inferiors d'Aritmètic,
- * dreceres ràpides de teclat i la Guia Completa amb TOTES les funcionalitats en ordre.
+ * Configuració declarativa dels teclats matemàtics inferiors d'Aritmètic,
+ * dreceres ràpides d'escriptura en línia (MathLive `inlineShortcuts`) i el Tour Complet d'exemples.
+ *
+ * ESTRUCTURA D'UN BOTÓ DE TECLAT:
+ * - `labelLatex` | `labelText`: contingut visual renderitzat al botó (s'auto-escala via `fitKeypadButtonLabels()`).
+ * - `insert`: plantilla LaTeX per a MathLive (`#0` = selecció actual o primer camp, `#?` = següent placeholder).
+ * - `cmd`: comanda nativa de MathLive (`moveToPreviousChar`, `deleteBackward`, `addRowAfter`, etc.).
+ * - `action`: acció d'alt nivell gestionada per `handleKeyButtonPress` a `js/app.js`
+ *   (`insertInlineText`, `addTextBlockInApartat`, `addImageInApartat`, `newMathLineInApartat`, `newApartatBelow`).
  */
 (function (global) {
   'use strict';
@@ -476,7 +483,7 @@
         },
         {
           kind: 'math',
-          latex: '\\text{TVM} = \\frac{f(2) - f(0)}{2 - 0}'
+          latex: 'T_{\\text{VM}} = \\frac{f(2) - f(0)}{2 - 0}'
         },
         {
           kind: 'math',

@@ -38,6 +38,7 @@
         <div class="toolbar-group" id="insertToolbarGroup">
           <button class="tb-btn" id="btnAddApartatTop" title="Crear un nou apartat a sota (Cmd/Ctrl + Enter)">⊞ <span class="tb-label">Apartat</span></button>
           <button class="tb-btn" id="btnAddTextInApTop" title="Afegir un bloc de text amb salt de línia automàtic dins l'apartat actual (Alt + T)">¶ <span class="tb-label">Text</span></button>
+          <button class="tb-btn" id="btnAddImageInApTop" title="Afegir una imatge o captura dins l'apartat actual (o enganxa amb Cmd/Ctrl + V)">🖼️ <span class="tb-label">Imatge</span></button>
           <button class="tb-btn" id="btnAddSectionTop" title="Inserir un títol de tema o d'exercici nou">§ <span class="tb-label">Secció</span></button>
         </div>
 
@@ -274,6 +275,8 @@
         <div class="sc-item"><span>Afegir bloc de paràgraf</span> <kbd>Alt + T</kbd></div>
         <div class="sc-item"><span>De bloc de text a equació</span> <kbd>Shift + Enter</kbd></div>
         <div class="sc-item"><span>Text curt dins d'equació</span> <kbd>"</kbd> o <kbd>⌘/Ctrl + T</kbd></div>
+        <div class="sc-item"><span>Variable amb subíndex de text</span> <kbd>_</kbd> seguit de <kbd>"</kbd></div>
+        <div class="sc-item"><span>Enganxar imatge / captura</span> <kbd>⌘/Ctrl + V</kbd></div>
         <div class="sc-item"><span>Moure's amunt / avall</span> <kbd>↑</kbd> / <kbd>↓</kbd></div>
         <div class="sc-item"><span>Fracció / Potència / Subíndex</span> <kbd>/</kbd> <kbd>^</kbd> <kbd>_</kbd></div>
         <div class="sc-item"><span>Límit / Integral / Arrel</span> <kbd>lim</kbd> <kbd>int</kbd> <kbd>sqrt</kbd></div>
@@ -377,18 +380,73 @@
           </div>
         </section>
 
-        <!-- Secció 2: Aspecte de la Pissarra -->
+        <!-- Secció 2: Aspecte de la Pissarra i Selector de Temes -->
         <section class="settings-section">
-          <div class="settings-section-title">🎨 Aspecte visual i pissarra</div>
+          <div class="settings-section-title">🎨 Selector de temes i aspecte visual</div>
 
-          <div class="settings-row">
-            <div class="settings-row-info">
-              <div class="settings-row-label">Tema de colors</div>
-              <div class="settings-row-sub"> Alterna entre fons clar de paper i pissarra fosca</div>
-            </div>
-            <div class="seg-control" data-setting="darkMode">
-              <button type="button" class="seg-btn" data-val="false">☀️ Clar</button>
-              <button type="button" class="seg-btn" data-val="true">🌙 Fosc</button>
+          <div>
+            <div class="settings-row-label" style="margin-bottom:3px;">Estètica i paleta de colors</div>
+            <div class="settings-row-sub" style="margin-bottom:9px;">Prova diferents ambients clars i foscos (el botó 🌙/☀️ de dalt alterna entre el teu tema clar i fosc preferits)</div>
+            <div class="theme-cards-grid" id="settingsThemeGrid">
+              <button type="button" class="theme-choice-card" data-theme-choice="classic">
+                <span class="theme-swatch-preview" style="background:#ffffff;border-color:#cbd5e1;">
+                  <span class="theme-swatch-bar" style="background:#f1f5f9;"></span>
+                  <span class="theme-swatch-dot" style="background:#2563eb;"></span>
+                  <span class="theme-swatch-ink" style="color:#0f172a;">f(x)</span>
+                </span>
+                <span class="theme-choice-name">☀️ Clàssic Blanc</span>
+                <span class="theme-choice-tag">Nítid i blau intens</span>
+              </button>
+
+              <button type="button" class="theme-choice-card" data-theme-choice="paper">
+                <span class="theme-swatch-preview" style="background:#fcfaf4;border-color:#d6cec2;">
+                  <span class="theme-swatch-bar" style="background:#f2ece1;"></span>
+                  <span class="theme-swatch-dot" style="background:#b45309;"></span>
+                  <span class="theme-swatch-ink" style="color:#292524;">f(x)</span>
+                </span>
+                <span class="theme-choice-name">📜 Paper Càlid</span>
+                <span class="theme-choice-tag">Quadern crema editorial</span>
+              </button>
+
+              <button type="button" class="theme-choice-card" data-theme-choice="sage">
+                <span class="theme-swatch-preview" style="background:#f7fbf9;border-color:#bfd4ca;">
+                  <span class="theme-swatch-bar" style="background:#e7f0ec;"></span>
+                  <span class="theme-swatch-dot" style="background:#0f766e;"></span>
+                  <span class="theme-swatch-ink" style="color:#132a24;">f(x)</span>
+                </span>
+                <span class="theme-choice-name">🌿 Sàlvia Suau</span>
+                <span class="theme-choice-tag">Verd calmant de lectura</span>
+              </button>
+
+              <button type="button" class="theme-choice-card" data-theme-choice="midnight">
+                <span class="theme-swatch-preview" style="background:#111a2e;border-color:#334155;">
+                  <span class="theme-swatch-bar" style="background:#0b1120;"></span>
+                  <span class="theme-swatch-dot" style="background:#3b82f6;"></span>
+                  <span class="theme-swatch-ink" style="color:#f1f5f9;">f(x)</span>
+                </span>
+                <span class="theme-choice-name">🌙 Nit Blava</span>
+                <span class="theme-choice-tag">Fosc marí profund</span>
+              </button>
+
+              <button type="button" class="theme-choice-card" data-theme-choice="chalkboard">
+                <span class="theme-swatch-preview" style="background:#14281d;border-color:#2d4f3c;">
+                  <span class="theme-swatch-bar" style="background:#0d1b13;"></span>
+                  <span class="theme-swatch-dot" style="background:#34d399;"></span>
+                  <span class="theme-swatch-ink" style="color:#f4f7f2;">f(x)</span>
+                </span>
+                <span class="theme-choice-name">🧑‍🏫 Pissarra d'Aula</span>
+                <span class="theme-choice-tag">Verd pissarra i guix</span>
+              </button>
+
+              <button type="button" class="theme-choice-card" data-theme-choice="carbon">
+                <span class="theme-swatch-preview" style="background:#121215;border-color:#2e2e36;">
+                  <span class="theme-swatch-bar" style="background:#09090b;"></span>
+                  <span class="theme-swatch-dot" style="background:#60a5fa;"></span>
+                  <span class="theme-swatch-ink" style="color:#fafafa;">f(x)</span>
+                </span>
+                <span class="theme-choice-name">🖤 Carbó OLED</span>
+                <span class="theme-choice-tag">Negre pur d'alt contrast</span>
+              </button>
             </div>
           </div>
 
@@ -541,6 +599,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Selector ocult per inserir imatges/captures dins d'un apartat -->
+  <input type="file" id="apartatImageInput" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" />
 
   <!-- Contenidor dedicat d'alta qualitat tipogràfica per a Impressió / PDF (A4) -->
   <div id="printDocument" class="print-document" aria-hidden="true"></div>

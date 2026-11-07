@@ -1,10 +1,31 @@
 /**
  * math-engine.js
- * Motor matemàtic per a Aritmètic:
- * - Analitzador de LaTeX tolerant (sense errors intrusius: si una expressió és pura notació de pissarra, no falla mai).
- * - Detecció de variables (incloent subíndexs com y_{\text{màx}}, x_1, lletres gregues, \Delta x, etc.) i funcions g(x).
- * - Avaluació numèrica i racional exacta (fraccions irreductibles), derivades f'(a), integrals definides, sumatoris, determinants 2x2 i 3x3.
- * - Resolució automàtica d'assignacions encadenades, equacions d'1 incògnita (lineals, quadràtiques i numèriques) i sistemes lineals NxN (Gauss).
+ * Motor matemàtic simbòlic-numèric d'Aritmètic (Zero-Error Blackboard Engine).
+ *
+ * ARQUITECTURA EN 5 ETAPES (guia per a futures instàncies d'agents):
+ * 1. Formatador Racional i Simbòlic (`formatValueRich`, `floatToNiceFraction`):
+ *    - Converteix resultats IEEE-754 en enters exactes, fraccions irreductibles (fraccions contínues),
+ *      múltiples racionals de \pi i radicals simplificats k\sqrt{m}/d, respectant `formatConfig`
+ *      (`decimalPlaces`, `preferFractions`, `decimalComma`).
+ * 2. Pre-processador i Divisor de Clàusules (`splitRowIntoClauses`, `stripProseAnnotations`):
+ *    - Desempaqueta decoracions de pissarra (\boxed, \cancel, \textcolor, \underbrace) i desenvolupa
+ *      determinants 2x2 i 3x3 (\begin{vmatrix}...\end{vmatrix}) per la regla de Sarrus.
+ *    - REGLA D'OR DEL TEXT AMB COMETES (" -> \text{...}):
+ *      Qualsevol \text{...} fora d'un subíndex és SEMPRE text explicatiu / unitats i MAI una variable
+ *      (s'elimina des del primer caràcter). Només es conserva \text{...} quan forma part del subíndex
+ *      d'una variable (p. ex. v_{\text{màx}}, A_{\text{triangle}}).
+ * 3. Tokenitzador LaTeX (`tokenizeLatex`, `canonicalizeVarKey`):
+ *    - Suporta coma decimal catalana (3,14) sense confondre-la amb comes separadores d'equacions,
+ *      multiplicació implícita (2x, 3\pi, (a)(b), \sin 2x), lletres gregues, \Delta x, graus (°) i derivades f'(x).
+ * 4. Parser AST Descendent Recursiu (`Parser`):
+ *    - Construeix un AST segur (amb límit de profunditat MAX_AST_DEPTH i longitud màxima contra DoS)
+ *      per a operadors, fraccions, arrels, límits numèrics laterals, integrals definides (Simpson adaptatiu)
+ *      i sumatoris/productoris.
+ * 5. Resoledor Iteratiu de Punt Fix i Anàlisi de Funcions a Trossos (`analyzeRows`):
+ *    - Propaga assignacions en qualsevol ordre (fins i tot si la fórmula s'escriu abans que les dades!),
+ *      resol equacions d'1 incògnita (lineals, quadràtiques amb \pm o arrels complexes, i Brent/Secant numèric),
+ *      resol sistemes lineals NxN per Gauss-Jordan amb classificació Rouché-Frobenius (SCD / SCI / SI),
+ *      i analitza automàticament la continuïtat, salts i derivabilitat de funcions definides a trossos (\begin{cases}).
  */
 (function (global) {
   'use strict';
@@ -576,11 +597,39 @@
     return parts;
   }
 
-  // Neteja anotacions de text lliure al final d'una expressió (ex: "6 \text{ és un enter}" -> "6")
+  // Neteja anotacions de text lliure (\text{...}) fora de subíndexs.
+  // REGLA CLAU: El text introduït amb " (\text{...}) MAI és una variable per si mateix (des del primer caràcter).
+  // Només pot haver-hi \text{...} dins d'una variable quan es troba al seu propi subíndex (ex: v_{\text{màx}}).
   function stripProseAnnotations(s) {
     let out = '';
     let i = 0;
+    // Pila de claus '{' obertes: true si la clau pertany a un subíndex '_{...}' (o està niada dins seu)
+    const subBraceStack = [];
+
     while (i < s.length) {
+      if (s[i] === '\\' && i + 1 < s.length && !/[a-zA-Z]/.test(s[i + 1])) {
+        out += s.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+
+      if (s[i] === '{') {
+        const prevNonSpace = out.trimEnd();
+        const parentIsSub = subBraceStack.length > 0 && subBraceStack[subBraceStack.length - 1];
+        const isDirectSub = prevNonSpace.endsWith('_') && !prevNonSpace.endsWith('\\_');
+        subBraceStack.push(parentIsSub || isDirectSub);
+        out += '{';
+        i++;
+        continue;
+      }
+
+      if (s[i] === '}') {
+        if (subBraceStack.length > 0) subBraceStack.pop();
+        out += '}';
+        i++;
+        continue;
+      }
+
       let matchedTextCmd = null;
       for (const cmd of ['\\text', '\\textrm', '\\textit', '\\textbf']) {
         if (s.startsWith(cmd, i) && !/[a-zA-Z]/.test(s[i + cmd.length] || '')) {
@@ -588,31 +637,27 @@
           break;
         }
       }
+
       if (matchedTextCmd) {
-        // Mira si està just després d'un '_' (subíndex!): si és un subíndex, CONSERVA'L!
         const prevNonSpace = out.trimEnd();
-        if (prevNonSpace.endsWith('_') || prevNonSpace.endsWith('{')) {
-          const br = extractBraced(s, i + matchedTextCmd.length);
-          if (br) {
-            out += s.slice(i, br.end);
-            i = br.end;
-            continue;
-          }
-        }
+        const inSubscript =
+          (prevNonSpace.endsWith('_') && !prevNonSpace.endsWith('\\_')) ||
+          (subBraceStack.length > 0 && subBraceStack[subBraceStack.length - 1]);
+
         const br = extractBraced(s, i + matchedTextCmd.length);
-        if (br) {
-          const inner = br.content.trim();
-          // Si és una sola paraula curta sense espais (ex: \text{TVM}, \text{àrea}), pot ser un identificador de variable!
-          if (/^[A-Za-zÀ-ÿ0-9]{1,10}$/.test(inner) && !/^(si|per|on|amb|és|es|un|una|el|la|de|del|i|o|rad|cm|mm|km|kg|ms|mol)$/i.test(inner)) {
-            out += `\\operatornamevar{${inner}}`;
-          } else {
-            // És text explicatiu / unitats: l'ometem de l'avaluació algebraica
-            out += ' ';
-          }
+        if (inSubscript && br) {
+          // Conserva \text{...} únicament quan forma part del subíndex d'una variable!
+          out += s.slice(i, br.end);
           i = br.end;
           continue;
         }
+
+        // Fora de subíndex: és text explicatiu o unitats -> mai es tracta com a variable
+        out += ' ';
+        i = br ? br.end : i + matchedTextCmd.length;
+        continue;
       }
+
       out += s[i];
       i++;
     }
@@ -658,16 +703,22 @@
         const br = extractBraced(s, j);
         if (br) {
           const subClean = br.content.trim();
-          if (!subClean) return { latexSub: '', end: br.end };
+          if (!subClean || /^\\text(?:rm|it|bf)?\{\s*\}$/.test(subClean)) {
+            return { latexSub: '', end: br.end };
+          }
           return { latexSub: `_{${subClean}}`, end: br.end };
         }
       } else if (s[j] === '\\') {
         let k = j + 1;
         while (k < s.length && /[a-zA-Z]/.test(s[k])) k++;
         const cmd = s.slice(j + 1, k);
-        if (cmd === 'text' || cmd === 'mathrm') {
+        if (cmd === 'text' || cmd === 'textrm' || cmd === 'textit' || cmd === 'textbf' || cmd === 'mathrm') {
           const br = extractBraced(s, k);
-          if (br) return { latexSub: `_{\\text{${br.content.trim()}}}`, end: br.end };
+          if (br) {
+            const innerSub = br.content.trim();
+            if (!innerSub) return { latexSub: '', end: br.end };
+            return { latexSub: `_{\\text{${innerSub}}}`, end: br.end };
+          }
         }
         return { latexSub: `_{\\${cmd}}`, end: k };
       } else if (j < s.length && /[a-zA-Z0-9À-ÿ]/.test(s[j])) {
