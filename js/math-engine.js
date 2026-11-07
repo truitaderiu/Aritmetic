@@ -1,6 +1,6 @@
 /**
  * math-engine.js
- * Motor matemàtic per a la Pissarra Matemàtica de Batxillerat:
+ * Motor matemàtic per a Aritmètic:
  * - Analitzador de LaTeX tolerant (sense errors intrusius: si una expressió és pura notació de pissarra, no falla mai).
  * - Detecció de variables (incloent subíndexs com y_{\text{màx}}, x_1, lletres gregues, \Delta x, etc.) i funcions g(x).
  * - Avaluació numèrica i racional exacta (fraccions irreductibles), derivades f'(a), integrals definides, sumatoris, determinants 2x2 i 3x3.
@@ -72,22 +72,43 @@
     return null;
   }
 
-  function formatNumberCatalan(val, useComma = true) {
+  const formatConfig = {
+    decimalPlaces: 6,
+    preferFractions: true,
+    decimalComma: true
+  };
+
+  function setFormatOptions(opts = {}) {
+    if (typeof opts.decimalPlaces === 'number' && opts.decimalPlaces >= 1 && opts.decimalPlaces <= 10) {
+      formatConfig.decimalPlaces = Math.round(opts.decimalPlaces);
+    }
+    if (typeof opts.preferFractions === 'boolean') {
+      formatConfig.preferFractions = opts.preferFractions;
+    }
+    if (typeof opts.decimalComma === 'boolean') {
+      formatConfig.decimalComma = opts.decimalComma;
+    }
+  }
+
+  function formatNumberCatalan(val, useComma) {
     if (!Number.isFinite(val)) {
       if (val === Infinity) return '+∞';
       if (val === -Infinity) return '-∞';
       return '';
     }
     if (Math.abs(val) < 1e-12) val = 0;
+    const decPlaces = formatConfig.decimalPlaces || 6;
+    const commaPref = typeof useComma === 'boolean' ? useComma : formatConfig.decimalComma;
     let str;
     const abs = Math.abs(val);
     if (abs !== 0 && (abs >= 1e7 || abs < 1e-4)) {
-      str = val.toExponential(4).replace(/\.?0+e/, 'e');
+      str = val.toExponential(Math.min(decPlaces, 6)).replace(/\.?0+e/, 'e');
     } else {
-      const rounded = Math.round(val * 1e6) / 1e6;
+      const factor = Math.pow(10, decPlaces);
+      const rounded = Math.round(val * factor) / factor;
       str = String(rounded);
     }
-    return useComma ? str.replace('.', ',') : str;
+    return commaPref ? str.replace('.', ',') : str;
   }
 
   function formatValueRich(val) {
@@ -106,76 +127,77 @@
       };
     }
 
-    // Fracció racional neta
-    const frac = floatToNiceFraction(val, 500, 1e-8);
-    if (frac && frac.den > 1) {
-      const sign = frac.num < 0 ? '-' : '';
-      const fracLatex = `${sign}\\frac{${Math.abs(frac.num)}}{${frac.den}}`;
-      const dec = formatNumberCatalan(val, true);
-      // Si el decimal és curt i exacte (ex: 0,5 o 2,25), mostrem decimal i fracció
-      return {
-        numeric: val,
-        latex: fracLatex,
-        approxLatex: dec,
-        text: `${frac.num}/${frac.den} ≈ ${dec}`,
-        isExact: true
-      };
-    }
+    if (formatConfig.preferFractions) {
+      // Fracció racional neta
+      const frac = floatToNiceFraction(val, 500, 1e-8);
+      if (frac && frac.den > 1) {
+        const sign = frac.num < 0 ? '-' : '';
+        const fracLatex = `${sign}\\frac{${Math.abs(frac.num)}}{${frac.den}}`;
+        const dec = formatNumberCatalan(val);
+        return {
+          numeric: val,
+          latex: fracLatex,
+          approxLatex: dec,
+          text: `${frac.num}/${frac.den} ≈ ${dec}`,
+          isExact: true
+        };
+      }
 
-    // Múltiple racional de pi (molt útil en trigonometria i àrees!)
-    const piRatio = floatToNiceFraction(val / Math.PI, 24, 1e-8);
-    if (piRatio && piRatio.num !== 0) {
-      const sign = piRatio.num < 0 ? '-' : '';
-      const absNum = Math.abs(piRatio.num);
-      const numPart = absNum === 1 ? '\\pi' : `${absNum}\\pi`;
-      const piLatex = piRatio.den === 1
-        ? `${sign}${numPart}`
-        : `${sign}\\frac{${numPart}}{${piRatio.den}}`;
-      const dec = formatNumberCatalan(val, true);
-      return {
-        numeric: val,
-        latex: piLatex,
-        approxLatex: dec,
-        text: `${ dec }`,
-        isExact: true
-      };
-    }
+      // Múltiple racional de pi (molt útil en trigonometria i àrees!)
+      const piRatio = floatToNiceFraction(val / Math.PI, 24, 1e-8);
+      if (piRatio && piRatio.num !== 0) {
+        const sign = piRatio.num < 0 ? '-' : '';
+        const absNum = Math.abs(piRatio.num);
+        const numPart = absNum === 1 ? '\\pi' : `${absNum}\\pi`;
+        const piLatex = piRatio.den === 1
+          ? `${sign}${numPart}`
+          : `${sign}\\frac{${numPart}}{${piRatio.den}}`;
+        const dec = formatNumberCatalan(val);
+        return {
+          numeric: val,
+          latex: piLatex,
+          approxLatex: dec,
+          text: `${dec}`,
+          isExact: true
+        };
+      }
 
-    // Arrel quadrada exacta d'un enter petit (ex: \sqrt{2}, 3\sqrt{5}, \frac{\sqrt{3}}{2})
-    for (const den of [1, 2, 3, 4]) {
-      const scaled = val * den;
-      const sq = scaled * scaled;
-      if (sq > 0 && sq <= 200 && Math.abs(sq - Math.round(sq)) < 1e-7) {
-        const n = Math.round(sq);
-        const r = Math.round(Math.sqrt(n));
-        if (r * r !== n) {
-          // Simplifica k * sqrt(m)
-          let k = 1, m = n;
-          for (let f = 2; f * f <= m; f++) {
-            while (m % (f * f) === 0) {
-              k *= f;
-              m /= f * f;
+      // Arrel quadrada exacta d'un enter petit (ex: \sqrt{2}, 3\sqrt{5}, \frac{\sqrt{3}}{2})
+      for (const den of [1, 2, 3, 4]) {
+        const scaled = val * den;
+        const sq = scaled * scaled;
+        if (sq > 0 && sq <= 200 && Math.abs(sq - Math.round(sq)) < 1e-7) {
+          const n = Math.round(sq);
+          const r = Math.round(Math.sqrt(n));
+          if (r * r !== n) {
+            // Simplifica k * sqrt(m)
+            let k = 1, m = n;
+            for (let f = 2; f * f <= m; f++) {
+              while (m % (f * f) === 0) {
+                k *= f;
+                m /= f * f;
+              }
             }
+            const g = gcd(k, den);
+            const kSimp = k / g;
+            const dSimp = den / g;
+            const sign = val < 0 ? '-' : '';
+            const rad = `${kSimp === 1 ? '' : kSimp}\\sqrt{${m}}`;
+            const surdLatex = dSimp === 1 ? `${sign}${rad}` : `${sign}\\frac{${rad}}{${dSimp}}`;
+            const dec = formatNumberCatalan(val);
+            return {
+              numeric: val,
+              latex: surdLatex,
+              approxLatex: dec,
+              text: dec,
+              isExact: true
+            };
           }
-          const g = gcd(k, den);
-          const kSimp = k / g;
-          const dSimp = den / g;
-          const sign = val < 0 ? '-' : '';
-          const rad = `${kSimp === 1 ? '' : kSimp}\\sqrt{${m}}`;
-          const surdLatex = dSimp === 1 ? `${sign}${rad}` : `${sign}\\frac{${rad}}{${dSimp}}`;
-          const dec = formatNumberCatalan(val, true);
-          return {
-            numeric: val,
-            latex: surdLatex,
-            approxLatex: dec,
-            text: dec,
-            isExact: true
-          };
         }
       }
     }
 
-    const dec = formatNumberCatalan(val, true);
+    const dec = formatNumberCatalan(val);
     return {
       numeric: val,
       latex: dec,
@@ -610,7 +632,11 @@
   // 3. Tokenitzador i Parser AST d'expressions matemàtiques LaTeX
   // ============================================================================
   function tokenizeLatex(input) {
-    let s = stripProseAnnotations(input);
+    const rawStr = String(input || '');
+    if (rawStr.length > 8000) {
+      throw new Error('Expression exceeds max safe length');
+    }
+    let s = stripProseAnnotations(rawStr);
     // Normalitza wrappers de mida de parèntesis
     s = s
       .replace(/\\left\s*\\\{/g, '(')
@@ -1026,14 +1052,21 @@
   // Parser recursiu descendent amb multiplicació implícita (2x, 3\pi, (x+1)(x-1), 2\sin x, etc.)
   function parseLatexExpr(latexStr, knownFuncs = null) {
     const tokens = tokenizeLatex(latexStr);
-    if (tokens.length === 0) throw new Error('Empty expression');
+    if (tokens.length === 0 || tokens.length > 2500) throw new Error('Invalid token length');
     let pos = 0;
+    let parseDepth = 0;
 
     function peek() { return tokens[pos] || null; }
     function consume() { return tokens[pos++]; }
 
     function parseExpression() {
-      return parseAddSub();
+      parseDepth++;
+      if (parseDepth > 80) throw new Error('Max expression nesting depth exceeded');
+      try {
+        return parseAddSub();
+      } finally {
+        parseDepth--;
+      }
     }
 
     function parseAddSub() {
@@ -1841,7 +1874,7 @@
   }
 
   // ============================================================================
-  // 4B. Funcions Definides a Trossos (Piecewise Functions de Batxillerat i PAU)
+  // 4B. Funcions Definides a Trossos (Piecewise Functions)
   // ============================================================================
   function extractPiecewiseCasesInner(rhsRaw) {
     if (!rhsRaw) return null;
@@ -3297,6 +3330,7 @@
   global.MathEngine = {
     analyzeRows,
     formatValueRich,
-    formatNumberCatalan
+    formatNumberCatalan,
+    setFormatOptions
   };
 })(typeof window !== 'undefined' ? window : globalThis);

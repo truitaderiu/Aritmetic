@@ -1,6 +1,6 @@
 /* ==========================================================================
-   Pissarra Matemàtica de Batxillerat v2 — Estils Principals
-   Llibretes i Pàgines · Apartats Multilínia i Text · Scoreboard · Gràfica
+   Aritmètic — Estils Principals
+   Llibretes i Pàgines · Apartats Multilínia i Text · Scoreboard · Gràfica · Responsive
    ========================================================================== */
 
 :root {
@@ -37,6 +37,13 @@
   --key-bg-op: #f8fafc;
   --key-hover: #f1f5f9;
   --key-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+
+  --font-ui: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-plain-text: 'Plus Jakarta Sans', 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+  --text-line-height: 1.62;
+  --board-max-width: 100%;
+  --pattern-line: rgba(15, 23, 42, 0.055);
+  --pattern-dot: rgba(15, 23, 42, 0.14);
 
   --math-font-size: 22px;
   --text-font-size: 15.5px;
@@ -81,10 +88,14 @@ body.dark-theme {
   --key-bg-op: #1e293b;
   --key-hover: #334155;
   --key-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+
+  --pattern-line: rgba(148, 163, 184, 0.08);
+  --pattern-dot: rgba(148, 163, 184, 0.2);
 }
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
@@ -92,7 +103,7 @@ html, body {
   padding: 0;
   height: 100%;
   overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  font-family: var(--font-ui);
   background: var(--bg-app);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
@@ -102,7 +113,9 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
+  max-width: 100%;
 }
 
 /* ==========================================================================
@@ -799,21 +812,83 @@ body.dark-theme .tb-btn[data-tooltip]::after {
 /* ==========================================================================
    Pissarra Central: Seccions (§) i Apartats Multilínia (Equacions + Text)
    ========================================================================== */
+/* Fons enfosquit quan s'obre un panell lateral sobre la pissarra en mòbil/tauleta */
+.mobile-drawer-backdrop {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.38);
+  z-index: 28;
+}
+.mobile-drawer-backdrop.visible {
+  display: block;
+}
+
 .whiteboard-scroll {
   flex: 1;
   min-width: 0;
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  background: var(--bg-board);
+  -webkit-overflow-scrolling: touch;
+  background-color: var(--bg-board);
   position: relative;
+}
+
+body[data-board-pattern="grid"] .whiteboard-scroll {
+  background-image:
+    linear-gradient(to right, var(--pattern-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--pattern-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+body[data-board-pattern="dots"] .whiteboard-scroll {
+  background-image: radial-gradient(var(--pattern-dot) 1.15px, transparent 1.15px);
+  background-size: 22px 22px;
+}
+
+body[data-board-pattern="ruled"] .whiteboard-scroll {
+  background-image: linear-gradient(to bottom, transparent 31px, var(--pattern-line) 31px);
+  background-size: 100% 32px;
+}
+
+body[data-board-width="wide"] .whiteboard-scroll,
+body[data-board-width="reading"] .whiteboard-scroll {
+  background-color: var(--bg-app);
 }
 
 .whiteboard-canvas-wrap {
   position: relative;
   min-height: 100%;
   width: 100%;
+  max-width: var(--board-max-width);
+  margin: 0 auto;
+  background-color: var(--bg-board);
   padding-bottom: 130px;
+}
+
+body[data-board-pattern="grid"] .whiteboard-canvas-wrap {
+  background-image:
+    linear-gradient(to right, var(--pattern-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--pattern-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+body[data-board-pattern="dots"] .whiteboard-canvas-wrap {
+  background-image: radial-gradient(var(--pattern-dot) 1.15px, transparent 1.15px);
+  background-size: 22px 22px;
+}
+
+body[data-board-pattern="ruled"] .whiteboard-canvas-wrap {
+  background-image: linear-gradient(to bottom, transparent 31px, var(--pattern-line) 31px);
+  background-size: 100% 32px;
+}
+
+body[data-board-width="wide"] .whiteboard-canvas-wrap,
+body[data-board-width="reading"] .whiteboard-canvas-wrap {
+  border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  box-shadow: 0 2px 18px rgba(15, 23, 42, 0.04);
 }
 
 .annotation-canvas,
@@ -890,6 +965,7 @@ body.dark-theme .tb-btn[data-tooltip]::after {
   border: none;
   background: transparent;
   color: var(--text-primary);
+  font-family: var(--font-plain-text);
   font-size: 15.5px;
   font-weight: 700;
   outline: none;
@@ -905,7 +981,7 @@ body.dark-theme .tb-btn[data-tooltip]::after {
   display: flex;
   align-items: stretch;
   border-bottom: 1.5px solid var(--border-subtle);
-  background: var(--bg-board);
+  background: transparent;
   position: relative;
   transition: background 0.12s ease, box-shadow 0.12s ease;
 }
@@ -918,6 +994,13 @@ body.dark-theme .tb-btn[data-tooltip]::after {
   background: var(--bg-row-active);
   box-shadow: inset 0 0 0 1.8px var(--accent-blue);
   z-index: 2;
+}
+
+body:not([data-board-pattern="plain"]) .apartat-block:hover {
+  background: rgba(37, 99, 235, 0.025);
+}
+body:not([data-board-pattern="plain"]) .apartat-block.focused {
+  background: rgba(37, 99, 235, 0.045);
 }
 
 .apartat-block.var-linked-highlight {
@@ -954,6 +1037,10 @@ body.dark-theme .tb-btn[data-tooltip]::after {
   background: rgba(148, 163, 184, 0.04);
 }
 
+body[data-hide-apartat-nums="true"] .apartat-gutter {
+  display: none;
+}
+
 .apartat-block.focused .apartat-gutter {
   color: var(--accent-blue);
   background: rgba(37, 99, 235, 0.06);
@@ -983,6 +1070,7 @@ body.dark-theme .tb-btn[data-tooltip]::after {
   border: none;
   background: transparent;
   color: var(--text-secondary);
+  font-family: var(--font-plain-text);
   font-size: 12.5px;
   font-weight: 600;
   outline: none;
@@ -1120,9 +1208,9 @@ math-field.equation-field::part(content) {
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-family: inherit;
+  font-family: var(--font-plain-text);
   font-size: var(--text-font-size);
-  line-height: 1.55;
+  line-height: var(--text-line-height);
   resize: none;
   overflow: hidden;
   white-space: pre-wrap;
@@ -1874,6 +1962,7 @@ math-field.equation-field::part(content) {
   height: 100%;
   display: block;
   cursor: grab;
+  touch-action: none;
 }
 .graph-canvas:active {
   cursor: grabbing;
@@ -1940,14 +2029,483 @@ kbd {
   font-weight: 600;
 }
 
-@media (max-width: 1050px) {
+/* ==========================================================================
+   Modal de Configuració General d'Aritmètic
+   ========================================================================== */
+.modal-card.settings-modal-card {
+  max-width: 710px;
+}
+
+.settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.settings-section {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-app);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-section-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-blue);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.font-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.font-choice-card {
+  border: 1.5px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border-radius: 9px;
+  padding: 10px 11px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, transform 0.1s ease;
+}
+
+.font-choice-card:hover {
+  border-color: var(--border-strong);
+}
+
+.font-choice-card.active {
+  border-color: var(--accent-blue);
+  background: var(--bg-panel);
+  box-shadow: 0 0 0 2px var(--accent-blue-soft);
+}
+
+.font-choice-sample {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+.font-choice-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.font-choice-tag {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.font-live-preview {
+  background: var(--bg-panel);
+  border: 1px dashed var(--border-strong);
+  border-left: 3.5px solid var(--accent-blue);
+  border-radius: 7px;
+  padding: 10px 13px;
+  font-family: var(--font-plain-text);
+  font-size: 14.5px;
+  line-height: var(--text-line-height);
+  color: var(--text-primary);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.settings-row + .settings-row {
+  border-top: 1px dashed var(--border-subtle);
+  padding-top: 10px;
+}
+
+.settings-row-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.settings-row-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-row-sub {
+  font-size: 11.8px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.seg-control {
+  display: inline-flex;
+  flex-wrap: wrap;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 2px;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.seg-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.seg-btn:hover {
+  color: var(--text-primary);
+}
+
+.seg-btn.active {
+  background: var(--accent-blue);
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);
+}
+
+.settings-zoom-ctrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.settings-zoom-val {
+  min-width: 48px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-footer {
+  margin-top: 16px;
+  padding-top: 13px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settings-cloud-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.settings-footer-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ==========================================================================
+    Disseny Responsiu i Tàctil (Tauletes i Mòbils)
+   ========================================================================== */
+@media (max-width: 1120px) {
   :root {
-    --notebooks-width: 220px;
-    --scoreboard-width: 285px;
+    --notebooks-width: 235px;
+    --scoreboard-width: 300px;
   }
+  .tb-label {
+    display: none;
+  }
+  .kp-desmos-layout {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+}
+
+/* Tauletes i pantalles mitjanes: Panells laterals com a calaixos flotants (Drawers) */
+@media (max-width: 960px) {
+  .notebooks-sidebar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: min(84vw, 290px);
+    min-width: 0;
+    z-index: 32;
+    box-shadow: 10px 0 30px rgba(15, 23, 42, 0.22);
+  }
+
+  .scoreboard-panel {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: min(88vw, 340px);
+    min-width: 0;
+    z-index: 32;
+    box-shadow: -10px 0 30px rgba(15, 23, 42, 0.22);
+  }
+
+  .cloud-popover,
+  .timer-popover {
+    position: fixed;
+    top: calc(var(--header-height) + 6px);
+    right: 10px;
+    left: auto;
+    max-width: calc(100vw - 20px);
+    z-index: 95;
+  }
+
   .kp-desmos-layout {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+}
+
+/* Telèfons Mòbils */
+@media (max-width: 680px) {
+  :root {
+    --header-height: 48px;
+  }
+
+  .topbar {
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .topbar-left {
+    gap: 6px;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .brand-title-text,
+  .zoom-toolbar-group,
+  .hide-on-mobile {
+    display: none !important;
+  }
+
+  .breadcrumb-bar {
+    padding: 4px 8px;
+    font-size: 12px;
+    max-width: 155px;
+  }
+
+  .topbar-right {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: flex-end;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 4px;
+  }
+  .topbar-right::-webkit-scrollbar {
+    display: none;
+  }
+
+  .section-gutter,
+  .apartat-gutter {
+    width: 30px;
+    min-width: 30px;
+    font-size: 11.5px;
+    padding-top: 12px;
+  }
+
+  .section-body {
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .apartat-header {
+    flex-wrap: wrap;
+    padding: 6px 10px 2px;
+    gap: 4px;
+  }
+
+  .apartat-toolbar {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .apartat-items {
+    padding: 4px 8px 8px;
+  }
+
+  math-field.equation-field {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  /* Evita el zoom forçat d'iOS Safari en prémer camps de text */
+  .section-title-input,
+  .apartat-label-input,
+  .apartat-textarea,
+  .var-test-input,
+  .func-eval-input {
+    font-size: max(16px, var(--text-font-size));
+  }
+
+  .whiteboard-canvas-wrap {
+    padding-bottom: 90px;
+  }
+
+  .keypad-dock {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .keypad-topbar {
+    padding: 4px 8px;
+    gap: 6px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .keypad-topbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .keypad-tabs {
+    flex-shrink: 0;
+  }
+
+  .keypad-controls {
+    flex-shrink: 0;
+  }
+
+  .keypad-content {
+    padding: 7px 8px 10px;
+    max-height: 35dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .kp-categorized-layout {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .key-btn {
+    min-height: 40px;
+    height: 40px;
+  }
+
+  .kp-categorized-layout .key-btn {
+    min-height: 44px;
+    height: 44px;
+  }
+
+  .ink-toolbar {
+    bottom: 12px;
+    max-width: calc(100vw - 16px);
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 6px 10px;
+  }
+
+  .modal-backdrop {
+    padding: 10px;
+  }
+
+  .modal-card {
+    padding: 16px;
+    max-height: 90dvh;
+    border-radius: 11px;
+  }
+
+  .save-grid,
+  .shortcuts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .font-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .settings-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .seg-control {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .seg-btn {
+    flex: 1 1 auto;
+    text-align: center;
+    padding: 6px 8px;
+  }
+
+  .settings-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-footer-btns {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .graph-canvas-box {
+    height: 270px;
+  }
+}
+
+@media (max-width: 420px) {
+  .breadcrumb-bar {
+    max-width: 118px;
+  }
+  .font-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Pantalles tàctils (tauletes i mòbils): botons visibles sense dependre de hover i sense tooltips enganxats */
+@media (hover: none), (pointer: coarse) {
+  .tb-btn[data-tooltip]::after {
+    display: none !important;
+  }
+
+  .apartat-block.focused .apartat-toolbar,
+  .section-block .apartat-toolbar,
+  .active-subitem .subitem-actions,
+  .nb-group.active-nb .nb-mini-actions,
+  .nb-page-item.active-page .nb-mini-actions {
+    opacity: 1;
+  }
+
+  .nb-icon-btn,
+  .row-icon-btn {
+    min-width: 28px;
+    min-height: 28px;
   }
 }
 
@@ -1958,7 +2516,11 @@ kbd {
   display: none;
   background: #ffffff;
   color: #0f172a;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  font-family: var(--font-plain-text);
+}
+
+body[data-hide-apartat-nums="true"] .print-apartat-gutter {
+  display: none;
 }
 
 /* Mode de mesura fora de pantalla per ajustar equacions amples abans de window.print() */

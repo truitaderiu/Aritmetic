@@ -98,7 +98,12 @@
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function isSafeHttpsUrl(urlStr) {
+    return typeof urlStr === 'string' && /^https:\/\/[^\s"'<>]+$/i.test(urlStr.trim());
   }
 
   function formatTimeHuman(isoStr) {
@@ -488,7 +493,7 @@
       }
 
       const localFp = window.PissarraApp.getNotebooksFingerprint();
-      const cloudFp = window.PissarraApp.computeExternalFingerprint(cloudData.notebooks);
+      const cloudFp = window.PissarraApp.computeExternalFingerprint(cloudData);
 
       // 2A. Contingut idèntic entre local i Drive
       if (localFp === cloudFp) {
@@ -803,8 +808,11 @@
       const userName = cloudState.user?.name || 'Compte de Google';
       const userEmail = cloudState.user?.email || 'Sessió activa';
       const initial = (userName[0] || 'G').toUpperCase();
-      const avatarHtml = cloudState.user?.picture
-        ? `<img src="${escapeHtml(cloudState.user.picture)}" alt="" class="cloud-avatar-img" referrerpolicy="no-referrer" />`
+      const safePic = cloudState.user?.picture && isSafeHttpsUrl(cloudState.user.picture)
+        ? cloudState.user.picture.trim()
+        : '';
+      const avatarHtml = safePic
+        ? `<img src="${escapeHtml(safePic)}" alt="" class="cloud-avatar-img" referrerpolicy="no-referrer" />`
         : `<div class="cloud-avatar-fallback">${escapeHtml(initial)}</div>`;
 
       let syncBadgeText = '🟢 Sincronitzat al núvol';
@@ -892,7 +900,7 @@
       ${fileWarningHtml}
       ${errorHtml}
       <p class="cloud-desc">
-        Inicia sessió per desar i obrir automàticament les teves llibretes al teu propi <strong>Google Drive</strong> des de qualsevol ordinador, tauleta o mòbil.
+        Inicia sessió per desar i obrir automàticament les teves llibretes i la configuració al teu propi <strong>Google Drive</strong> des de qualsevol ordinador, tauleta o mòbil.
       </p>
       <div class="cloud-privacy-note">
         🔒 <strong>100% privat:</strong> es desa en una carpeta oculta pròpia de l'app (<code>appDataFolder</code>) del teu compte. Ningú més pot veure les teves llibretes.

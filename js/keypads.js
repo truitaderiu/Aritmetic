@@ -1,6 +1,6 @@
 /**
  * keypads.js
- * Configuració dels teclats inferiors (inspirats en Desmos Scientific i ampliats per a Batxillerat),
+ * Configuració dels teclats matemàtics inferiors d'Aritmètic,
  * dreceres ràpides de teclat i la Guia Completa amb TOTES les funcionalitats en ordre.
  */
 (function (global) {
@@ -74,7 +74,7 @@
     },
     {
       id: 'calcul',
-      label: 'Càlcul i Batx',
+      label: 'Càlcul i Anàlisi',
       layout: 'Categorized',
       groups: [
         {
@@ -106,7 +106,7 @@
           ]
         },
         {
-          title: 'Funcions a Trossos (Batx / PAU)',
+          title: 'Funcions a Trossos',
           cols: 4,
           items: [
             {
@@ -124,7 +124,7 @@
             {
               labelLatex: '\\begin{cases} x\\neq a \\\\ x=a \\end{cases}',
               insert: 'f(x) = \\begin{cases} #0 & \\text{si } x \\neq #? \\\\ #? & \\text{si } x = #? \\end{cases}',
-              title: 'Funció amb punt singular / discontinuïtat evitable (PAU)',
+              title: 'Funció amb punt singular o discontinuïtat evitable',
               span: 2
             },
             {
@@ -173,7 +173,7 @@
       layout: 'Categorized',
       groups: [
         {
-          title: 'Matrius i Determinants (2n Batx)',
+          title: 'Matrius i Determinants',
           cols: 4,
           items: [
             {
@@ -301,7 +301,7 @@
           ]
         },
         {
-          title: 'Alfabet Grec (Variables habituals a Batxillerat)',
+          title: 'Alfabet Grec',
           cols: 6,
           items: [
             { labelLatex: '\\alpha', insert: '\\alpha' },
@@ -382,7 +382,7 @@
       items: [
         {
           kind: 'text',
-          text: 'Ara cada divisió horitzontal de la pissarra és un APARTAT complet! Dins d\'un mateix apartat hi pots escriure blocs de text llargs com aquest (enunciats de Selectivitat, justificacions teòriques o conclusions) i fan salt de línia automàtic sense sobrepassar mai pel costat.\nA sota del text, dins del mateix apartat, pots encadenar tantes línies d\'equacions com vulguis (prem Enter per afegir una altra línia d\'equació al mateix apartat, o Cmd/Ctrl+Enter —o doble Enter en buit— per crear un apartat nou):'
+          text: 'Ara cada divisió horitzontal de la pissarra és un APARTAT complet! Dins d\'un mateix apartat hi pots escriure blocs de text llargs com aquest (enunciats de problemes, justificacions teòriques o conclusions) i fan salt de línia automàtic sense sobrepassar mai pel costat.\nA sota del text, dins del mateix apartat, pots encadenar tantes línies d\'equacions com vulguis (prem Enter per afegir una altra línia d\'equació al mateix apartat, o Cmd/Ctrl+Enter —o doble Enter en buit— per crear un apartat nou):'
         },
         {
           kind: 'math',
@@ -491,7 +491,7 @@
 
     {
       type: 'section',
-      title: '4. Funcions Definides a Trossos, Continuïtat, Salts i Paràmetres PAU'
+      title: '4. Funcions Definides a Trossos, Continuïtat, Salts i Paràmetres'
     },
     {
       type: 'apartat',
@@ -500,7 +500,7 @@
       items: [
         {
           kind: 'text',
-          text: 'A la pestanya «Càlcul i Batx» tens plantilles directes de funcions a 2 i 3 trossos (o escriu la drecera «trossos»). Clica a g(x) i mira el Scoreboard: analitza automàticament els punts de ruptura (x = 1 i x = 3), calcula límits laterals i, si obres «📈 Gràfica», dibuixa cada tros sense línies verticals falses i amb els punts plens (●) i buits (○) exactes!'
+          text: 'A la pestanya «Càlcul i Anàlisi» tens plantilles directes de funcions a 2 i 3 trossos (o escriu la drecera «trossos»). Clica a g(x) i mira el Scoreboard: analitza automàticament els punts de ruptura (x = 1 i x = 3), calcula límits laterals i, si obres «📈 Gràfica», dibuixa cada tros sense línies verticals falses i amb els punts plens (●) i buits (○) exactes!'
         },
         {
           kind: 'math',
@@ -514,7 +514,7 @@
     },
     {
       type: 'apartat',
-      label: 'Apartat 4b — Exercici clàssic de Selectivitat (PAU): trobar paràmetres perquè sigui contínua i derivable',
+      label: 'Apartat 4b — Estudi de paràmetres perquè una funció sigui contínua i derivable',
       accent: 'green',
       items: [
         {
@@ -566,7 +566,7 @@
 
     {
       type: 'section',
-      title: '6. Àlgebra Lineal 2n Batxillerat: Sistemes de Gauss (SCD, SCI, SI), Matrius i Determinants'
+      title: '6. Àlgebra Lineal: Sistemes de Gauss (SCD, SCI, SI), Matrius i Determinants'
     },
     {
       type: 'apartat',
@@ -575,7 +575,7 @@
       items: [
         {
           kind: 'text',
-          text: 'Pots escriure sistemes amb la clau de sistemes (pestanya «Càlcul i Batx») o en línies separades. El motor aplica Gauss-Jordan (resolent x = 2, y = 1, z = 2) i desenvolupa determinants 2×2 i 3×3 (D_3 = 33), fins i tot aïllant el paràmetre k = 2 dins d\'un determinant!'
+          text: 'Pots escriure sistemes amb la clau de sistemes (pestanya «Càlcul i Anàlisi») o en línies separades. El motor aplica Gauss-Jordan (resolent x = 2, y = 1, z = 2) i desenvolupa determinants 2×2 i 3×3 (D_3 = 33), fins i tot aïllant el paràmetre k = 2 dins d\'un determinant!'
         },
         {
           kind: 'math',

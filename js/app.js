@@ -1,21 +1,62 @@
 /**
  * app.js (v2)
- * Pissarra Matemàtica de Batxillerat:
- * - Sistema jeràrquic de Llibretes i Pàgines amb persistència automàtica.
+ * Aritmètic — Pissarra i Càlcul Matemàtic:
+ * - Sistema jeràrquic de Llibretes i Pàgines amb persistència automàtica i sincronització amb Google Drive.
  * - Exportació i importació en fitxer (.json) de tot l'espai, d'una llibreta o d'una pàgina individual + còpia LaTeX + PDF.
  * - Estructura d'APARTATS multilínia que combinen múltiples línies d'equacions (<math-field>) i blocs de text amb salt de línia automàtic.
+ * - Configuració completa personalitzable (tipografies, pauta de fons, amplada, format numèric, precisió, PDF) sincronitzada al núvol.
  * - Scoreboard de Variables i Funcions amb 3 àmbits (Apartat actual / Exercici / Tota la pàgina).
- * - Gràfica cartesiana interactiva (zoom/pan i múltiples funcions), Punter Làser efímer, Llapis lliure i Temporitzador de classe.
+ * - Gràfica cartesiana interactiva (zoom/pan amb ratolí i tàctil), Punter Làser efímer, Llapis lliure i Temporitzador.
  */
 (function () {
   'use strict';
 
+  // NOTA IMPORTANT: Es manté la clau interna d'emmagatzematge per compatibilitat total amb llibretes ja desades.
   const STORAGE_KEY_V2 = 'pissarra_mat_batx_v2';
   const ZOOM_MATH_SIZES = [17, 19, 22, 26, 30, 35];
   const ZOOM_TEXT_SIZES = [13.5, 14.5, 15.5, 17.5, 19.5, 22];
   const DEFAULT_ZOOM_INDEX = 2;
   const NOTEBOOK_COLORS = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777', '#0891b2'];
   const GRAPH_COLORS = ['#2563eb', '#059669', '#dc2626', '#7c3aed', '#d97706'];
+
+  const FONT_STACKS = {
+    jakarta: "'Plus Jakarta Sans', 'Avenir Next', 'Segoe UI', system-ui, sans-serif",
+    lora: "'Lora', Georgia, 'Times New Roman', serif",
+    atkinson: "'Atkinson Hyperlegible', Verdana, system-ui, sans-serif",
+    inter: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    merriweather: "'Merriweather', Palatino, Georgia, serif",
+    jetbrains: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
+  };
+
+  const LINE_HEIGHT_VALUES = {
+    compact: '1.42',
+    normal: '1.62',
+    relaxed: '1.85'
+  };
+
+  const BOARD_WIDTH_VALUES = {
+    full: '100%',
+    wide: '1060px',
+    reading: '820px'
+  };
+
+  const DEFAULT_SETTINGS = {
+    textFont: 'jakarta',
+    textLineHeight: 'normal',
+    darkMode: false,
+    boardPattern: 'plain',
+    boardWidth: 'full',
+    zoomIndex: DEFAULT_ZOOM_INDEX,
+    showApartatNumbers: true,
+    angleMode: 'RAD',
+    scoreboardScope: 'section',
+    preferFractions: true,
+    decimalPlaces: 6,
+    decimalComma: true,
+    showInlineQuickEval: true,
+    inkStrokeWidth: 2.8,
+    pdfShowHeader: true
+  };
 
   const state = {
     notebooks: [],
@@ -26,15 +67,28 @@
     expandedNotebookIds: new Set(),
 
     activeKeypadTab: 'principal',
-    angleMode: 'RAD', // 'RAD' | 'DEG'
-    scoreboardScope: 'section', // 'apartat' | 'section' | 'page'
+    angleMode: DEFAULT_SETTINGS.angleMode, // 'RAD' | 'DEG'
+    scoreboardScope: DEFAULT_SETTINGS.scoreboardScope, // 'apartat' | 'section' | 'page'
     notebooksSidebarOpen: true,
     scoreboardCollapsed: false,
     keypadCollapsed: false,
-    darkMode: false,
-    zoomIndex: DEFAULT_ZOOM_INDEX,
+    darkMode: DEFAULT_SETTINGS.darkMode,
+    zoomIndex: DEFAULT_SETTINGS.zoomIndex,
 
-    funcQuickInputs: {},
+    // Preferències personalitzables d'Aritmètic (sincronitzades amb Drive)
+    textFont: DEFAULT_SETTINGS.textFont,
+    textLineHeight: DEFAULT_SETTINGS.textLineHeight,
+    boardPattern: DEFAULT_SETTINGS.boardPattern,
+    boardWidth: DEFAULT_SETTINGS.boardWidth,
+    showApartatNumbers: DEFAULT_SETTINGS.showApartatNumbers,
+    preferFractions: DEFAULT_SETTINGS.preferFractions,
+    decimalPlaces: DEFAULT_SETTINGS.decimalPlaces,
+    decimalComma: DEFAULT_SETTINGS.decimalComma,
+    showInlineQuickEval: DEFAULT_SETTINGS.showInlineQuickEval,
+    inkStrokeWidth: DEFAULT_SETTINGS.inkStrokeWidth,
+    pdfShowHeader: DEFAULT_SETTINGS.pdfShowHeader,
+
+    funcQuickInputs: Object.create(null),
 
     // Eines en viu: Llapis i Punter Làser
     inkActive: false,
@@ -48,7 +102,7 @@
     graphHiddenKeys: new Set(),
     graphHoverPt: null,
 
-    // Temporitzador de classe
+    // Temporitzador
     timerSeconds: 180,
     timerRunning: false,
     timerMode: 'countdown', // 'countdown' | 'stopwatch'
@@ -61,6 +115,11 @@
   let analysisTimer = null;
   let lastAnalysis = { variables: [], functions: [], lineQuickResults: {} };
   let laserAnimFrame = null;
+  let overlayCanvasScale = 1;
+
+  function isMobileViewport() {
+    return window.innerWidth <= 960;
+  }
 
   function uid(prefix = 'id') {
     return `${prefix}_${Math.random().toString(36).slice(2, 9)}_${Date.now().toString(36)}`;
@@ -70,8 +129,36 @@
     return JSON.parse(JSON.stringify(obj));
   }
 
+  function isSafeKey(k) {
+    return (
+      typeof k === 'string' &&
+      k.length > 0 &&
+      k.length <= 80 &&
+      k !== '__proto__' &&
+      k !== 'constructor' &&
+      k !== 'prototype'
+    );
+  }
+
+  function escapeCssIdent(val) {
+    const s = String(val ?? '');
+    if (window.CSS && typeof window.CSS.escape === 'function') {
+      return window.CSS.escape(s);
+    }
+    return s.replace(/["\\#.:[\]()>+~*^$|]/g, '\\$&');
+  }
+
+  function queryByDataAttr(prefixSelector, dataAttr, value) {
+    if (!value) return null;
+    try {
+      return document.querySelector(`${prefixSelector}[${dataAttr}="${escapeCssIdent(value)}"]`);
+    } catch (_e) {
+      return null;
+    }
+  }
+
   // ============================================================================
-  // 1. Construcció de Blocs, Pàgines, Llibretes i Persistència
+  // 1. Validació, Sanitització, Construcció de Llibretes i Persistència
   // ============================================================================
   function createEmptyApartat(initialTextOrMath = 'math') {
     const item = initialTextOrMath === 'text'
@@ -83,6 +170,205 @@
       label: '',
       accent: 'none',
       items: [item]
+    };
+  }
+
+  function sanitizeColor(c, fallback = '#2563eb') {
+    if (typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c.trim())) {
+      return c.trim();
+    }
+    return fallback;
+  }
+
+  function sanitizeOverrides(raw) {
+    const clean = {};
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return clean;
+    for (const [k, v] of Object.entries(raw)) {
+      if (!isSafeKey(k)) continue;
+      const num = Number(v);
+      if (Number.isFinite(num)) clean[k] = num;
+    }
+    return clean;
+  }
+
+  function sanitizeInkStrokes(rawStrokes) {
+    if (!Array.isArray(rawStrokes)) return [];
+    const out = [];
+    const maxStrokes = Math.min(rawStrokes.length, 800);
+    for (let i = 0; i < maxStrokes; i++) {
+      const st = rawStrokes[i];
+      if (!st || typeof st !== 'object' || !Array.isArray(st.points)) continue;
+      const pts = [];
+      const maxPts = Math.min(st.points.length, 4000);
+      for (let j = 0; j < maxPts; j++) {
+        const p = st.points[j];
+        if (p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))) {
+          pts.push({ x: Number(p.x), y: Number(p.y) });
+        }
+      }
+      if (pts.length === 0) continue;
+      const w = Number(st.width);
+      out.push({
+        color: sanitizeColor(st.color, '#ef4444'),
+        width: Number.isFinite(w) ? Math.max(0.8, Math.min(14, w)) : 2.8,
+        points: pts
+      });
+    }
+    return out;
+  }
+
+  function sanitizeBlocksList(rawBlocks) {
+    const allowedAccents = new Set(['none', 'green', 'blue', 'amber']);
+    const blocks = [];
+    if (Array.isArray(rawBlocks)) {
+      const maxBlocks = Math.min(rawBlocks.length, 600);
+      for (let i = 0; i < maxBlocks; i++) {
+        const b = rawBlocks[i];
+        if (!b || typeof b !== 'object') continue;
+        const bId = typeof b.id === 'string' && b.id.trim() ? b.id.trim().slice(0, 80) : uid('blk');
+        if (b.type === 'section') {
+          blocks.push({
+            id: bId,
+            type: 'section',
+            title: typeof b.title === 'string' ? b.title.slice(0, 300) : ''
+          });
+        } else {
+          const rawItems = Array.isArray(b.items) ? b.items : [];
+          const items = [];
+          const maxItems = Math.min(rawItems.length, 400);
+          for (let j = 0; j < maxItems; j++) {
+            const it = rawItems[j];
+            if (!it || typeof it !== 'object') continue;
+            const iId = typeof it.id === 'string' && it.id.trim() ? it.id.trim().slice(0, 80) : uid('it');
+            if (it.kind === 'text') {
+              items.push({
+                id: iId,
+                kind: 'text',
+                text: typeof it.text === 'string' ? it.text.slice(0, 30000) : ''
+              });
+            } else {
+              items.push({
+                id: iId,
+                kind: 'math',
+                latex: typeof it.latex === 'string' ? it.latex.slice(0, 12000) : ''
+              });
+            }
+          }
+          if (items.length === 0) {
+            items.push({ id: uid('it'), kind: 'math', latex: '' });
+          }
+          blocks.push({
+            id: bId,
+            type: 'apartat',
+            label: typeof b.label === 'string' ? b.label.slice(0, 300) : '',
+            accent: allowedAccents.has(b.accent) ? b.accent : 'none',
+            items
+          });
+        }
+      }
+    }
+    if (!blocks.some(b => b.type === 'apartat')) {
+      blocks.push(createEmptyApartat('math'));
+    }
+    return blocks;
+  }
+
+  function sanitizePageObject(rawPg, indexFallback = 1) {
+    const pg = rawPg && typeof rawPg === 'object' ? rawPg : {};
+    const titleRaw = typeof pg.title === 'string' && pg.title.trim() ? pg.title.trim().slice(0, 160) : `Pàgina ${indexFallback}`;
+    const ts = Number(pg.updatedAt);
+    return {
+      id: typeof pg.id === 'string' && pg.id.trim() ? pg.id.trim().slice(0, 80) : uid('page'),
+      title: titleRaw,
+      updatedAt: Number.isFinite(ts) && ts > 0 ? ts : Date.now(),
+      overrides: sanitizeOverrides(pg.overrides),
+      inkStrokes: sanitizeInkStrokes(pg.inkStrokes),
+      blocks: sanitizeBlocksList(pg.blocks)
+    };
+  }
+
+  function sanitizeNotebookObject(rawNb, idx = 0) {
+    const nb = rawNb && typeof rawNb === 'object' ? rawNb : {};
+    const fallbackColor = NOTEBOOK_COLORS[idx % NOTEBOOK_COLORS.length];
+    const titleRaw = typeof nb.title === 'string' && nb.title.trim() ? nb.title.trim().slice(0, 160) : `Llibreta ${idx + 1}`;
+    const rawPages = Array.isArray(nb.pages) ? nb.pages.slice(0, 200) : [];
+    const pages = rawPages.map((p, pIdx) => sanitizePageObject(p, pIdx + 1));
+    if (pages.length === 0) {
+      pages.push(sanitizePageObject({ title: 'Pàgina 1' }, 1));
+    }
+    return {
+      id: typeof nb.id === 'string' && nb.id.trim() ? nb.id.trim().slice(0, 80) : uid('nb'),
+      title: titleRaw,
+      color: sanitizeColor(nb.color, fallbackColor),
+      pages
+    };
+  }
+
+  function sanitizeNotebooksList(rawList) {
+    if (!Array.isArray(rawList)) return [];
+    return rawList.slice(0, 100).map((nb, idx) => sanitizeNotebookObject(nb, idx));
+  }
+
+  function applySettingsToState(rawSettings, options = { includePanelLayout: false }) {
+    const s = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
+    if (s.angleMode === 'RAD' || s.angleMode === 'DEG') state.angleMode = s.angleMode;
+    if (s.scoreboardScope === 'apartat' || s.scoreboardScope === 'section' || s.scoreboardScope === 'page') {
+      state.scoreboardScope = s.scoreboardScope;
+    }
+    if (s.darkMode !== undefined) state.darkMode = Boolean(s.darkMode);
+    if (typeof s.zoomIndex === 'number' && Number.isInteger(s.zoomIndex)) {
+      state.zoomIndex = Math.max(0, Math.min(ZOOM_MATH_SIZES.length - 1, s.zoomIndex));
+    }
+    if (typeof s.textFont === 'string' && Object.prototype.hasOwnProperty.call(FONT_STACKS, s.textFont)) {
+      state.textFont = s.textFont;
+    }
+    if (typeof s.textLineHeight === 'string' && Object.prototype.hasOwnProperty.call(LINE_HEIGHT_VALUES, s.textLineHeight)) {
+      state.textLineHeight = s.textLineHeight;
+    }
+    if (s.boardPattern === 'plain' || s.boardPattern === 'grid' || s.boardPattern === 'dots' || s.boardPattern === 'ruled') {
+      state.boardPattern = s.boardPattern;
+    }
+    if (s.boardWidth === 'full' || s.boardWidth === 'wide' || s.boardWidth === 'reading') {
+      state.boardWidth = s.boardWidth;
+    }
+    if (s.showApartatNumbers !== undefined) state.showApartatNumbers = Boolean(s.showApartatNumbers);
+    if (s.preferFractions !== undefined) state.preferFractions = Boolean(s.preferFractions);
+    if (s.decimalPlaces !== undefined) {
+      const dp = Number(s.decimalPlaces);
+      if ([2, 4, 6, 8].includes(dp)) state.decimalPlaces = dp;
+    }
+    if (s.decimalComma !== undefined) state.decimalComma = Boolean(s.decimalComma);
+    if (s.showInlineQuickEval !== undefined) state.showInlineQuickEval = Boolean(s.showInlineQuickEval);
+    if (s.inkStrokeWidth !== undefined) {
+      const sw = Number(s.inkStrokeWidth);
+      if (Number.isFinite(sw) && sw >= 1 && sw <= 10) state.inkStrokeWidth = sw;
+    }
+    if (s.pdfShowHeader !== undefined) state.pdfShowHeader = Boolean(s.pdfShowHeader);
+
+    if (options.includePanelLayout) {
+      if (s.notebooksSidebarOpen !== undefined) state.notebooksSidebarOpen = Boolean(s.notebooksSidebarOpen);
+      if (s.scoreboardCollapsed !== undefined) state.scoreboardCollapsed = Boolean(s.scoreboardCollapsed);
+      if (s.keypadCollapsed !== undefined) state.keypadCollapsed = Boolean(s.keypadCollapsed);
+    }
+  }
+
+  function getSyncedSettingsSnapshot(src = state) {
+    return {
+      textFont: src.textFont ?? DEFAULT_SETTINGS.textFont,
+      textLineHeight: src.textLineHeight ?? DEFAULT_SETTINGS.textLineHeight,
+      darkMode: Boolean(src.darkMode ?? DEFAULT_SETTINGS.darkMode),
+      boardPattern: src.boardPattern ?? DEFAULT_SETTINGS.boardPattern,
+      boardWidth: src.boardWidth ?? DEFAULT_SETTINGS.boardWidth,
+      zoomIndex: typeof src.zoomIndex === 'number' ? src.zoomIndex : DEFAULT_SETTINGS.zoomIndex,
+      showApartatNumbers: src.showApartatNumbers !== undefined ? Boolean(src.showApartatNumbers) : DEFAULT_SETTINGS.showApartatNumbers,
+      angleMode: src.angleMode || DEFAULT_SETTINGS.angleMode,
+      scoreboardScope: src.scoreboardScope || DEFAULT_SETTINGS.scoreboardScope,
+      preferFractions: src.preferFractions !== undefined ? Boolean(src.preferFractions) : DEFAULT_SETTINGS.preferFractions,
+      decimalPlaces: Number.isFinite(Number(src.decimalPlaces)) ? Number(src.decimalPlaces) : DEFAULT_SETTINGS.decimalPlaces,
+      decimalComma: src.decimalComma !== undefined ? Boolean(src.decimalComma) : DEFAULT_SETTINGS.decimalComma,
+      showInlineQuickEval: src.showInlineQuickEval !== undefined ? Boolean(src.showInlineQuickEval) : DEFAULT_SETTINGS.showInlineQuickEval,
+      inkStrokeWidth: Number.isFinite(Number(src.inkStrokeWidth)) ? Number(src.inkStrokeWidth) : DEFAULT_SETTINGS.inkStrokeWidth,
+      pdfShowHeader: src.pdfShowHeader !== undefined ? Boolean(src.pdfShowHeader) : DEFAULT_SETTINGS.pdfShowHeader
     };
   }
 
@@ -135,15 +421,15 @@
     };
   }
 
-  function createStarterClassesNotebook() {
+  function createStarterGeneralNotebook() {
     return {
       id: uid('nb'),
-      title: '📘 Classes 1r Batxillerat',
+      title: '📘 Apunts i Càlculs',
       color: '#059669',
       pages: [
         {
           id: uid('page'),
-          title: 'Classe 1 — Pissarra nova',
+          title: 'Pàgina 1 — Espai de treball',
           updatedAt: Date.now(),
           overrides: {},
           inkStrokes: [],
@@ -153,15 +439,15 @@
     };
   }
 
-  function createStarter2nBatxNotebook() {
+  function createStarterAlgebraNotebook() {
     return {
       id: uid('nb'),
-      title: '📗 Classes 2n Batxillerat (PAU)',
+      title: '📗 Àlgebra i Anàlisi',
       color: '#7c3aed',
       pages: [
         {
           id: uid('page'),
-          title: 'Àlgebra i Anàlisi',
+          title: 'Sistemes i Funcions',
           updatedAt: Date.now(),
           overrides: {},
           inkStrokes: [],
@@ -171,7 +457,33 @@
     };
   }
 
-  const TOUR_VERSION = 3;
+  const TOUR_VERSION = 4;
+
+  function migrateLegacyStarterTitles(notebooks) {
+    let changed = false;
+    for (const n of notebooks || []) {
+      if (n.title === '📘 Classes 1r Batxillerat') {
+        n.title = '📘 Apunts i Càlculs';
+        if (n.pages && n.pages.length === 1 && n.pages[0].title === 'Classe 1 — Pissarra nova' && isBlankStarterPage(n.pages[0])) {
+          n.pages[0].title = 'Pàgina 1 — Espai de treball';
+        }
+        changed = true;
+      } else if (n.title === '📗 Classes 2n Batxillerat (PAU)') {
+        n.title = '📗 Àlgebra i Anàlisi';
+        if (n.pages && n.pages.length === 1 && n.pages[0].title === 'Àlgebra i Anàlisi' && isBlankStarterPage(n.pages[0])) {
+          n.pages[0].title = 'Sistemes i Funcions';
+        }
+        changed = true;
+      }
+      for (const p of n.pages || []) {
+        if (p.title === '🌟 Tour Complet (Totes les funcions)') {
+          p.blocks = hydrateShowcaseBlocks();
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
 
   function loadState() {
     try {
@@ -179,47 +491,36 @@
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.notebooks) && parsed.notebooks.length > 0) {
-          state.notebooks = parsed.notebooks;
-          state.activeNotebookId = parsed.activeNotebookId || parsed.notebooks[0].id;
-          const nb = getNotebookById(state.activeNotebookId) || state.notebooks[0];
-          state.activeNotebookId = nb.id;
-          state.activePageId = parsed.activePageId || nb.pages[0]?.id;
-          if (!nb.pages.some(p => p.id === state.activePageId)) {
-            state.activePageId = nb.pages[0]?.id;
-          }
-          const s = parsed.settings || {};
-          state.angleMode = s.angleMode || 'RAD';
-          state.scoreboardScope = s.scoreboardScope || 'section';
-          state.darkMode = Boolean(s.darkMode);
-          state.zoomIndex = typeof s.zoomIndex === 'number' ? s.zoomIndex : DEFAULT_ZOOM_INDEX;
-          state.notebooksSidebarOpen = s.notebooksSidebarOpen !== undefined ? Boolean(s.notebooksSidebarOpen) : true;
-          state.scoreboardCollapsed = Boolean(s.scoreboardCollapsed);
-          state.keypadCollapsed = Boolean(s.keypadCollapsed);
-          state.notebooks.forEach(n => state.expandedNotebookIds.add(n.id));
+          const cleanNbs = sanitizeNotebooksList(parsed.notebooks);
+          if (cleanNbs.length > 0) {
+            state.notebooks = cleanNbs;
+            state.activeNotebookId = parsed.activeNotebookId || state.notebooks[0].id;
+            const nb = getNotebookById(state.activeNotebookId) || state.notebooks[0];
+            state.activeNotebookId = nb.id;
+            state.activePageId = parsed.activePageId || nb.pages[0]?.id;
+            if (!nb.pages.some(p => p.id === state.activePageId)) {
+              state.activePageId = nb.pages[0]?.id;
+            }
+            applySettingsToState(parsed.settings || {}, { includePanelLayout: true });
+            state.notebooks.forEach(n => state.expandedNotebookIds.add(n.id));
 
-          // Actualitza automàticament la pàgina del Tour Complet amb les noves funcionalitats (ex: Funcions a Trossos) sense tocar cap pàgina de l'usuari!
-          if (parsed.tourVersion !== TOUR_VERSION) {
-            let updatedTour = false;
-            for (const n of state.notebooks) {
-              for (const p of n.pages || []) {
-                if (p.title === '🌟 Tour Complet (Totes les funcions)') {
-                  p.blocks = hydrateShowcaseBlocks();
-                  updatedTour = true;
-                }
+            // Actualitza automàticament la pàgina del Tour Complet i títols d'exemple antics sense tocar cap contingut de l'usuari!
+            if (parsed.tourVersion !== TOUR_VERSION) {
+              if (migrateLegacyStarterTitles(state.notebooks)) {
+                saveState({ isInitialSeed: true, contentChanged: false });
               }
             }
-            if (updatedTour) saveState({ isInitialSeed: true, contentChanged: false });
+            return;
           }
-          return;
         }
       }
     } catch (_e) { /* ignora errors */ }
 
-    // Primera càrrega v2: creem el sistema de Llibretes amb la Guia Completa com a portada!
+    // Primera càrrega: creem el sistema de Llibretes amb la Guia Completa com a portada!
     const nbGuide = createShowcaseNotebook();
-    const nb1r = createStarterClassesNotebook();
-    const nb2n = createStarter2nBatxNotebook();
-    state.notebooks = [nbGuide, nb1r, nb2n];
+    const nbGen = createStarterGeneralNotebook();
+    const nbAlg = createStarterAlgebraNotebook();
+    state.notebooks = [nbGuide, nbGen, nbAlg];
     state.activeNotebookId = nbGuide.id;
     state.activePageId = nbGuide.pages[0].id;
     state.notebooks.forEach(n => state.expandedNotebookIds.add(n.id));
@@ -237,10 +538,7 @@
       activeNotebookId: state.activeNotebookId,
       activePageId: state.activePageId,
       settings: {
-        angleMode: state.angleMode,
-        scoreboardScope: state.scoreboardScope,
-        darkMode: state.darkMode,
-        zoomIndex: state.zoomIndex,
+        ...getSyncedSettingsSnapshot(state),
         notebooksSidebarOpen: state.notebooksSidebarOpen,
         scoreboardCollapsed: state.scoreboardCollapsed,
         keypadCollapsed: state.keypadCollapsed
@@ -253,7 +551,7 @@
     try {
       const contentChanged = opts.contentChanged !== false;
       const page = getActivePage();
-      if (page && contentChanged && !opts.fromCloud && !opts.isInitialSeed) {
+      if (page && contentChanged && !opts.skipPageTimestamp && !opts.fromCloud && !opts.isInitialSeed) {
         page.updatedAt = Date.now();
       }
       const payload = buildWorkspacePayload();
@@ -295,23 +593,72 @@
   }
 
   // ============================================================================
-  // 2. Utilitats LaTeX Estàtic i Auto-alçada de Blocs de Text
+  // 2. Utilitats LaTeX Estàtic (amb Sanitització XSS) i Auto-alçada de Text
   // ============================================================================
+  const FORBIDDEN_MATH_TAGS = new Set([
+    'SCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'APPLET', 'FORM', 'INPUT',
+    'BUTTON', 'TEXTAREA', 'SELECT', 'META', 'LINK', 'BASE', 'STYLE',
+    'FOREIGNOBJECT', 'A', 'VIDEO', 'AUDIO'
+  ]);
+
+  function sanitizeMathMarkup(rawHtml) {
+    if (typeof rawHtml !== 'string' || !rawHtml) return '';
+    const tpl = document.createElement('template');
+    tpl.innerHTML = rawHtml;
+
+    const toRemove = [];
+    const walker = document.createTreeWalker(tpl.content, NodeFilter.SHOW_ELEMENT);
+    let node = walker.nextNode();
+    while (node) {
+      if (FORBIDDEN_MATH_TAGS.has(node.tagName.toUpperCase())) {
+        toRemove.push(node);
+      } else {
+        const attrs = Array.from(node.attributes);
+        for (const attr of attrs) {
+          const name = attr.name.toLowerCase();
+          if (
+            name.startsWith('on') ||
+            name === 'href' ||
+            name === 'xlink:href' ||
+            name === 'src' ||
+            name === 'srcdoc' ||
+            name === 'action' ||
+            name === 'formaction' ||
+            name === 'data'
+          ) {
+            node.removeAttribute(attr.name);
+          } else if (name === 'style') {
+            if (/url\s*\(|expression\s*\(|javascript:|vbscript:|-moz-binding/i.test(attr.value)) {
+              node.removeAttribute(attr.name);
+            }
+          }
+        }
+      }
+      node = walker.nextNode();
+    }
+    for (const bad of toRemove) {
+      bad.remove();
+    }
+    return tpl.innerHTML;
+  }
+
   function renderLatexStatic(latex) {
     try {
       if (window.MathLive && typeof window.MathLive.convertLatexToMarkup === 'function') {
-        return window.MathLive.convertLatexToMarkup(latex, { defaultMode: 'math' });
+        const rawMarkup = window.MathLive.convertLatexToMarkup(String(latex ?? ''), { defaultMode: 'math' });
+        return sanitizeMathMarkup(rawMarkup);
       }
     } catch (_e) { /* fallback */ }
     return `<span>${escapeHtml(latex)}</span>`;
   }
 
   function escapeHtml(str) {
-    return String(str)
+    return String(str ?? '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   function autoResizeTextarea(ta) {
@@ -559,7 +906,7 @@
   }
 
   function createNewNotebook() {
-    const name = prompt('Nom de la nova llibreta (ex: 2n Batxillerat B, Classes Júlia...):', `Llibreta ${state.notebooks.length + 1}`);
+    const name = prompt('Nom de la nova llibreta (ex: Càlcul, Àlgebra, Física...):', `Llibreta ${state.notebooks.length + 1}`);
     if (!name || !name.trim()) return;
     const color = NOTEBOOK_COLORS[state.notebooks.length % NOTEBOOK_COLORS.length];
     const newPage = {
@@ -603,6 +950,10 @@
     state.activeNotebookId = notebookId;
     state.activePageId = pageId;
     state.expandedNotebookIds.add(notebookId);
+    if (isMobileViewport() && state.notebooksSidebarOpen) {
+      state.notebooksSidebarOpen = false;
+      updatePanelsVisibility();
+    }
     const page = getActivePage();
     selectDefaultActiveItem(page);
     saveState({ contentChanged: false, silentPill: true });
@@ -610,7 +961,9 @@
     renderBoardBlocks();
     redrawAnnotations();
     requestAnimationFrame(() => {
-      if (state.activeItemId) focusItemById(state.activeItemId, 'end');
+      if (state.activeItemId && !isMobileViewport()) {
+        focusItemById(state.activeItemId, 'end');
+      }
     });
   }
 
@@ -1174,7 +1527,7 @@
     renderBoardBlocks();
     requestAnimationFrame(() => {
       focusItemById(newAp.items[0].id, 'start');
-      const el = document.querySelector(`.apartat-block[data-block-id="${newAp.id}"]`);
+      const el = queryByDataAttr('.apartat-block', 'data-block-id', newAp.id);
       if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     });
   }
@@ -1190,7 +1543,8 @@
     saveState();
     renderBoardBlocks();
     requestAnimationFrame(() => {
-      const inp = document.querySelector(`.section-block[data-block-id="${sec.id}"] .section-title-input`);
+      const secEl = queryByDataAttr('.section-block', 'data-block-id', sec.id);
+      const inp = secEl ? secEl.querySelector('.section-title-input') : null;
       if (inp) inp.focus();
     });
   }
@@ -1220,7 +1574,7 @@
     if (!block) return;
     const order = ['none', 'green', 'blue', 'amber'];
     block.accent = order[(order.indexOf(block.accent || 'none') + 1) % order.length];
-    const el = document.querySelector(`.apartat-block[data-block-id="${blockId}"]`);
+    const el = queryByDataAttr('.apartat-block', 'data-block-id', blockId);
     if (el) el.dataset.accent = block.accent;
     saveState();
   }
@@ -1418,6 +1772,7 @@
     document.querySelectorAll('.quick-calc-slot').forEach(slot => {
       const itemId = slot.dataset.quickFor;
       slot.innerHTML = '';
+      if (!state.showInlineQuickEval) return;
       const info = lineQuickResults[itemId];
       if (!info || !info.formatted) return;
 
@@ -1471,7 +1826,7 @@
 
     if (solvedList.length > 0) {
       const sec = document.createElement('div');
-      sec.innerHTML = `<div class="sb-section-label"><span>Variables calculades (${solvedList.length})</span><span>${state.angleMode}</span></div>`;
+      sec.innerHTML = `<div class="sb-section-label"><span>Variables calculades (${solvedList.length})</span><span>${escapeHtml(state.angleMode)}</span></div>`;
       const cards = document.createElement('div');
       cards.className = 'sb-cards';
       solvedList.forEach(v => cards.appendChild(buildVariableCard(v, page)));
@@ -1511,8 +1866,12 @@
       if (v.itemIds && v.itemIds.length > 0) {
         const bId = v.blockIds[0];
         const iId = v.itemIds[0];
-        setActiveBlockAndItem(bId, iId, true);
-        const el = document.querySelector(`[data-item-id="${iId}"]`);
+        if (isMobileViewport() && !state.scoreboardCollapsed) {
+          state.scoreboardCollapsed = true;
+          updatePanelsVisibility();
+        }
+        setActiveBlockAndItem(bId, iId, !isMobileViewport());
+        const el = queryByDataAttr('', 'data-item-id', iId);
         if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
     });
@@ -1606,7 +1965,9 @@
       clearBtn.textContent = '✕ Treure prova';
       clearBtn.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        delete page.overrides[v.key];
+        if (isSafeKey(v.key) && page.overrides) {
+          delete page.overrides[v.key];
+        }
         saveState();
         runAnalysisNow();
       });
@@ -1630,7 +1991,7 @@
         okBtn.textContent = 'Aplicar';
         const applyVal = () => {
           const parsed = parseFloat(inp.value.replace(',', '.'));
-          if (Number.isFinite(parsed)) {
+          if (Number.isFinite(parsed) && isSafeKey(v.key)) {
             page.overrides = page.overrides || {};
             page.overrides[v.key] = parsed;
             saveState();
@@ -1664,8 +2025,12 @@
     card.addEventListener('click', (ev) => {
       if (ev.target.tagName === 'INPUT' || ev.target.tagName === 'BUTTON') return;
       if (fn.blockId && fn.itemId) {
-        setActiveBlockAndItem(fn.blockId, fn.itemId, true);
-        const el = document.querySelector(`[data-item-id="${fn.itemId}"]`);
+        if (isMobileViewport() && !state.scoreboardCollapsed) {
+          state.scoreboardCollapsed = true;
+          updatePanelsVisibility();
+        }
+        setActiveBlockAndItem(fn.blockId, fn.itemId, !isMobileViewport());
+        const el = queryByDataAttr('', 'data-item-id', fn.itemId);
         if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
     });
@@ -1697,30 +2062,31 @@
     if (fn.isPiecewise && fn.piecewiseInfo && fn.piecewiseInfo.breakpoints.length > 0) {
       const bpBox = document.createElement('div');
       bpBox.className = 'pw-breakpoints-box';
-      const paramName = fn.params[0] || 'x';
+      const paramNameSafe = escapeHtml(fn.params[0] || 'x');
+      const fnNameSafe = escapeHtml(String(fn.nameLatex || 'f').replace(/^\\/, ''));
 
       fn.piecewiseInfo.breakpoints.forEach(bp => {
         const badge = document.createElement('div');
-        const xStr = bp.xFormatted ? bp.xFormatted.text : window.MathEngine.formatNumberCatalan(bp.x, true);
-        const lStr = bp.leftFormatted ? bp.leftFormatted.text : '∄';
-        const rStr = bp.rightFormatted ? bp.rightFormatted.text : '∄';
-        const vStr = bp.valueFormatted ? bp.valueFormatted.text : '∄';
+        const xStrSafe = escapeHtml(bp.xFormatted ? bp.xFormatted.text : window.MathEngine.formatNumberCatalan(bp.x, true));
+        const lStrSafe = escapeHtml(bp.leftFormatted ? bp.leftFormatted.text : '∄');
+        const rStrSafe = escapeHtml(bp.rightFormatted ? bp.rightFormatted.text : '∄');
+        const vStrSafe = escapeHtml(bp.valueFormatted ? bp.valueFormatted.text : '∄');
 
         if (bp.status === 'continuous') {
           badge.className = 'pw-bp-badge bp-continuous';
-          badge.innerHTML = `<span>${paramName} = ${xStr}</span><span>${bp.isDifferentiable ? 'Contínua i derivable ✓' : 'Contínua ✓ (punt angulós)'}</span>`;
+          badge.innerHTML = `<span>${paramNameSafe} = ${xStrSafe}</span><span>${bp.isDifferentiable ? 'Contínua i derivable ✓' : 'Contínua ✓ (punt angulós)'}</span>`;
         } else if (bp.status === 'jump') {
           badge.className = 'pw-bp-badge bp-jump';
-          badge.innerHTML = `<span>${paramName} = ${xStr}: Salt finit</span><span>L⁻ = ${lStr} · L⁺ = ${rStr}</span>`;
+          badge.innerHTML = `<span>${paramNameSafe} = ${xStrSafe}: Salt finit</span><span>L⁻ = ${lStrSafe} · L⁺ = ${rStrSafe}</span>`;
         } else if (bp.status === 'removable') {
           badge.className = 'pw-bp-badge bp-removable';
-          badge.innerHTML = `<span>${paramName} = ${xStr}: Evitable</span><span>L = ${lStr} · ${fn.nameLatex.replace(/^\\/, '')}(${xStr}) = ${vStr}</span>`;
+          badge.innerHTML = `<span>${paramNameSafe} = ${xStrSafe}: Evitable</span><span>L = ${lStrSafe} · ${fnNameSafe}(${xStrSafe}) = ${vStrSafe}</span>`;
         } else if (bp.status === 'asymptotic') {
           badge.className = 'pw-bp-badge bp-asymptotic';
-          badge.innerHTML = `<span>${paramName} = ${xStr}</span><span>Salt infinit (asímptota)</span>`;
+          badge.innerHTML = `<span>${paramNameSafe} = ${xStrSafe}</span><span>Salt infinit (asímptota)</span>`;
         } else {
           badge.className = 'pw-bp-badge bp-boundary';
-          badge.innerHTML = `<span>${paramName} = ${xStr}</span><span>Extrem de domini</span>`;
+          badge.innerHTML = `<span>${paramNameSafe} = ${xStrSafe}</span><span>Extrem de domini</span>`;
         }
         bpBox.appendChild(badge);
       });
@@ -1739,7 +2105,7 @@
       input.type = 'text';
       input.className = 'func-eval-input';
       input.placeholder = fn.params[0];
-      input.value = state.funcQuickInputs[fn.key] !== undefined ? state.funcQuickInputs[fn.key] : '';
+      input.value = isSafeKey(fn.key) && state.funcQuickInputs[fn.key] !== undefined ? state.funcQuickInputs[fn.key] : '';
 
       const suffix = document.createElement('span');
       suffix.innerHTML = renderLatexStatic(') =');
@@ -1749,7 +2115,9 @@
 
       const computeQuickFn = () => {
         const raw = input.value.trim().replace(',', '.');
-        state.funcQuickInputs[fn.key] = input.value;
+        if (isSafeKey(fn.key)) {
+          state.funcQuickInputs[fn.key] = input.value;
+        }
         if (!raw || !Number.isFinite(Number(raw))) {
           outSpan.textContent = '…';
           return;
@@ -1774,17 +2142,17 @@
 
   function highlightBoardItems(blockIds, itemIds, active) {
     (blockIds || []).forEach(bId => {
-      const el = document.querySelector(`.apartat-block[data-block-id="${bId}"]`);
+      const el = queryByDataAttr('.apartat-block', 'data-block-id', bId);
       if (el) el.classList.toggle('var-linked-highlight', active);
     });
     (itemIds || []).forEach(iId => {
-      const el = document.querySelector(`[data-item-id="${iId}"]`);
+      const el = queryByDataAttr('', 'data-item-id', iId);
       if (el) el.classList.toggle('item-linked-highlight', active);
     });
   }
 
   // ============================================================================
-  // 6. Gràfica Cartesiana Interactiva (amb suport complet de Funcions a Trossos!)
+  // 6. Gràfica Cartesiana Interactiva (Ratolí + Gestos Tàctils Pan & Pinch-Zoom)
   // ============================================================================
   function openGraphModal() {
     state.graphOpen = true;
@@ -1800,13 +2168,14 @@
     chipsWrap.innerHTML = '';
     const fns = (lastAnalysis.functions || []).filter(f => f.params.length === 1);
     fns.forEach((fn, idx) => {
-      const color = GRAPH_COLORS[idx % GRAPH_COLORS.length];
+      const color = sanitizeColor(GRAPH_COLORS[idx % GRAPH_COLORS.length], '#2563eb');
       const chip = document.createElement('button');
       chip.className = 'graph-fn-chip';
       const hidden = state.graphHiddenKeys.has(fn.key);
       chip.style.opacity = hidden ? '0.45' : '1';
+      const branchCnt = Number(fn.piecewiseInfo?.branchCount) || 2;
       const labelHtml = fn.isPiecewise
-        ? `${renderLatexStatic(fn.signatureLatex)} <span style="font-size:11.5px;color:var(--text-secondary);">(${fn.piecewiseInfo?.branchCount || 2} trossos)</span>`
+        ? `${renderLatexStatic(fn.signatureLatex)} <span style="font-size:11.5px;color:var(--text-secondary);">(${branchCnt} trossos)</span>`
         : renderLatexStatic(`${fn.signatureLatex} = ${fn.bodyLatex}`);
       chip.innerHTML = `<span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span> ${labelHtml}`;
       chip.addEventListener('click', () => {
@@ -1863,8 +2232,82 @@
       drawGraphCanvas();
     }, { passive: false });
 
+    // Gestos tàctils per a mòbil i tauleta: arrossegar amb 1 dit i pessigar (pinch-to-zoom) amb 2 dits
+    let touchMode = null; // 'pan' | 'pinch'
+    let tLastX = 0, tLastY = 0;
+    let pinchStartDist = 0;
+    let pinchStartScale = 42;
+
+    const getTouchDist = (t0, t1) => Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+
+    canvas.addEventListener('touchstart', (ev) => {
+      if (!state.graphOpen) return;
+      ev.preventDefault();
+      if (ev.touches.length === 1) {
+        touchMode = 'pan';
+        tLastX = ev.touches[0].clientX;
+        tLastY = ev.touches[0].clientY;
+        const rect = canvas.getBoundingClientRect();
+        state.graphHoverPt = {
+          px: ev.touches[0].clientX - rect.left,
+          py: ev.touches[0].clientY - rect.top
+        };
+        drawGraphCanvas();
+      } else if (ev.touches.length >= 2) {
+        touchMode = 'pinch';
+        state.graphHoverPt = null;
+        pinchStartDist = Math.max(10, getTouchDist(ev.touches[0], ev.touches[1]));
+        pinchStartScale = state.graphView.scale;
+        tLastX = (ev.touches[0].clientX + ev.touches[1].clientX) / 2;
+        tLastY = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (ev) => {
+      if (!state.graphOpen || !touchMode) return;
+      ev.preventDefault();
+      if (touchMode === 'pan' && ev.touches.length === 1) {
+        const cx = ev.touches[0].clientX;
+        const cy = ev.touches[0].clientY;
+        const dx = cx - tLastX;
+        const dy = cy - tLastY;
+        tLastX = cx;
+        tLastY = cy;
+        state.graphView.cx -= dx / state.graphView.scale;
+        state.graphView.cy += dy / state.graphView.scale;
+        const rect = canvas.getBoundingClientRect();
+        state.graphHoverPt = { px: cx - rect.left, py: cy - rect.top };
+        drawGraphCanvas();
+      } else if (ev.touches.length >= 2) {
+        touchMode = 'pinch';
+        const dist = Math.max(10, getTouchDist(ev.touches[0], ev.touches[1]));
+        const midX = (ev.touches[0].clientX + ev.touches[1].clientX) / 2;
+        const midY = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
+        const dx = midX - tLastX;
+        const dy = midY - tLastY;
+        tLastX = midX;
+        tLastY = midY;
+        const newScale = Math.max(4, Math.min(800, pinchStartScale * (dist / pinchStartDist)));
+        state.graphView.cx -= dx / newScale;
+        state.graphView.cy += dy / newScale;
+        state.graphView.scale = newScale;
+        drawGraphCanvas();
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (ev) => {
+      if (ev.touches.length === 0) {
+        touchMode = null;
+      } else if (ev.touches.length === 1) {
+        touchMode = 'pan';
+        tLastX = ev.touches[0].clientX;
+        tLastY = ev.touches[0].clientY;
+      }
+    });
+
     document.getElementById('btnResetGraphView')?.addEventListener('click', () => {
       state.graphView = { cx: 0, cy: 0, scale: 42 };
+      state.graphHoverPt = null;
       drawGraphCanvas();
     });
   }
@@ -2075,7 +2518,10 @@
       }
       coordsBadge.textContent = parts.join('   ·   ');
     } else if (coordsBadge) {
-      coordsBadge.textContent = 'Roda del ratolí: zoom · Arrossega: moure';
+      const isCoarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+      coordsBadge.textContent = isCoarse
+        ? '1 dit: moure · 2 dits: zoom'
+        : 'Roda del ratolí: zoom · Arrossega: moure';
     }
   }
 
@@ -2087,7 +2533,7 @@
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '') || 'pissarra';
+      .replace(/^-|-$/g, '') || 'aritmetic';
   }
 
   function downloadJsonFile(filename, dataObj) {
@@ -2109,10 +2555,7 @@
       kind: 'pissarra_workspace',
       version: 2,
       exportedAt: new Date().toISOString(),
-      settings: {
-        angleMode: state.angleMode,
-        scoreboardScope: state.scoreboardScope
-      },
+      settings: getSyncedSettingsSnapshot(state),
       notebooks: state.notebooks
     });
   }
@@ -2178,18 +2621,20 @@
     });
 
     const parts = [];
-    parts.push(`
-      <header class="print-doc-header">
-        <div style="min-width:0;">
-          <div class="print-doc-kicker">📚 ${escapeHtml(nb ? nb.title : 'Aritmètic · Batxillerat')}</div>
-          <h1 class="print-doc-title">${escapeHtml(pg.title || 'Apunts de Matemàtiques')}</h1>
-        </div>
-        <div class="print-doc-meta">
-          <div>${escapeHtml(dateFormatted)}</div>
-          <div>Mode angular: <strong>${escapeHtml(state.angleMode)}</strong></div>
-        </div>
-      </header>
-    `);
+    if (state.pdfShowHeader !== false) {
+      parts.push(`
+        <header class="print-doc-header">
+          <div style="min-width:0;">
+            <div class="print-doc-kicker">📚 ${escapeHtml(nb ? nb.title : 'Aritmètic')}</div>
+            <h1 class="print-doc-title">${escapeHtml(pg.title || 'Apunts de Matemàtiques')}</h1>
+          </div>
+          <div class="print-doc-meta">
+            <div>${escapeHtml(dateFormatted)}</div>
+            <div>Mode angular: <strong>${escapeHtml(state.angleMode)}</strong></div>
+          </div>
+        </header>
+      `);
+    }
 
     let apartatNum = 0;
     (pg.blocks || []).forEach((block) => {
@@ -2276,8 +2721,11 @@
 
     // 1. És un espai de treball complet
     if (data.kind === 'pissarra_workspace' || Array.isArray(data.notebooks)) {
-      const incoming = deepClone(data.notebooks || []);
-      if (incoming.length === 0) return;
+      const incoming = sanitizeNotebooksList(deepClone(data.notebooks || []));
+      if (incoming.length === 0) {
+        alert('El fitxer no conté cap llibreta vàlida.');
+        return;
+      }
       incoming.forEach(nb => {
         nb.id = uid('nb');
         (nb.pages || []).forEach(pg => {
@@ -2288,6 +2736,10 @@
 
       if (mode === 'replace') {
         state.notebooks = incoming;
+        if (data.settings) {
+          applySettingsToState(data.settings, { includePanelLayout: false });
+          applyThemeAndZoom();
+        }
       } else {
         state.notebooks.push(...incoming);
       }
@@ -2301,7 +2753,7 @@
 
     // 2. És una llibreta individual
     if (data.kind === 'pissarra_notebook' && data.notebook) {
-      const nb = deepClone(data.notebook);
+      const nb = sanitizeNotebookObject(deepClone(data.notebook), state.notebooks.length);
       nb.id = uid('nb');
       (nb.pages || []).forEach(pg => {
         pg.id = uid('page');
@@ -2317,10 +2769,11 @@
 
     // 3. És una pàgina individual
     if (data.kind === 'pissarra_page' && data.page) {
-      const pg = deepClone(data.page);
+      const activeNb = getActiveNotebook();
+      if (!activeNb) return;
+      const pg = sanitizePageObject(deepClone(data.page), activeNb.pages.length + 1);
       pg.id = uid('page');
       reassignBlockAndItemIds(pg);
-      const activeNb = getActiveNotebook();
       activeNb.pages.push(pg);
       saveState();
       switchNotebookAndPage(activeNb.id, pg.id);
@@ -2506,28 +2959,46 @@
 
     const getCoords = (ev, canvas) => {
       const rect = canvas.getBoundingClientRect();
-      const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
-      const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
+      const touch = (ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]);
+      const cx = touch ? touch.clientX : ev.clientX;
+      const cy = touch ? touch.clientY : ev.clientY;
       return { x: cx - rect.left, y: cy - rect.top };
     };
 
-    // Llapis persistent dins la pàgina actual
+    // Llapis persistent dins la pàgina actual (ignora gestos de 2 dits per permetre desplaçament segur)
     const startInk = (ev) => {
       if (!state.inkActive) return;
+      if (ev.touches && ev.touches.length > 1) {
+        drawingInk = false;
+        currentStroke = null;
+        return;
+      }
       ev.preventDefault();
       const page = getActivePage();
       if (!page) return;
       drawingInk = true;
       const pt = getCoords(ev, inkCanvas);
-      currentStroke = { color: state.inkColor, width: 2.8, points: [pt] };
+      currentStroke = {
+        color: sanitizeColor(state.inkColor, '#ef4444'),
+        width: Number.isFinite(Number(state.inkStrokeWidth)) ? Number(state.inkStrokeWidth) : 2.8,
+        points: [pt]
+      };
       page.inkStrokes = page.inkStrokes || [];
       page.inkStrokes.push(currentStroke);
       redrawAnnotations();
     };
     const moveInk = (ev) => {
       if (!drawingInk || !currentStroke) return;
+      if (ev.touches && ev.touches.length > 1) {
+        drawingInk = false;
+        currentStroke = null;
+        redrawAnnotations();
+        return;
+      }
       ev.preventDefault();
-      currentStroke.points.push(getCoords(ev, inkCanvas));
+      if (currentStroke.points.length < 4000) {
+        currentStroke.points.push(getCoords(ev, inkCanvas));
+      }
       redrawAnnotations();
     };
     const endInk = () => {
@@ -2544,10 +3015,12 @@
     inkCanvas.addEventListener('touchstart', startInk, { passive: false });
     inkCanvas.addEventListener('touchmove', moveInk, { passive: false });
     window.addEventListener('touchend', endInk);
+    window.addEventListener('touchcancel', endInk);
 
-    // Punter Làser vermell que s'esvaeix suaument (ideal per assenyalar explicant!)
+    // Punter Làser vermell que s'esvaeix suaument
     const pushLaserPt = (ev) => {
       if (!state.laserActive) return;
+      if (ev.touches && ev.touches.length > 1) return;
       const pt = getCoords(ev, laserCanvas);
       state.laserTrail.push({ x: pt.x, y: pt.y, t: performance.now() });
       if (!laserAnimFrame) {
@@ -2555,9 +3028,14 @@
       }
     };
     laserCanvas.addEventListener('mousemove', pushLaserPt);
-    laserCanvas.addEventListener('touchmove', (ev) => { ev.preventDefault(); pushLaserPt(ev); }, { passive: false });
+    laserCanvas.addEventListener('touchmove', (ev) => {
+      if (ev.touches && ev.touches.length > 1) return;
+      ev.preventDefault();
+      pushLaserPt(ev);
+    }, { passive: false });
 
     window.addEventListener('resize', () => {
+      updatePanelsVisibility();
       autoResizeAllTextareas();
       resizeOverlayCanvases();
       fitKeypadButtonLabels();
@@ -2569,7 +3047,10 @@
     const laserCanvas = document.getElementById('laserCanvas');
     if (!laserCanvas) { laserAnimFrame = null; return; }
     const ctx = laserCanvas.getContext('2d');
+    if (!ctx) { laserAnimFrame = null; return; }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
+    ctx.setTransform(overlayCanvasScale, 0, 0, overlayCanvasScale, 0, 0);
 
     const now = performance.now();
     const DURATION = 900; // ms d'estela
@@ -2615,16 +3096,35 @@
     const inkCanvas = document.getElementById('annotationCanvas');
     const laserCanvas = document.getElementById('laserCanvas');
     if (!wrap || !inkCanvas || !laserCanvas) return;
-    const w = wrap.scrollWidth;
-    const h = wrap.scrollHeight;
-    if (inkCanvas.width !== w || inkCanvas.height !== h) {
-      inkCanvas.width = w;
-      inkCanvas.height = h;
+
+    const cssW = Math.max(1, wrap.scrollWidth);
+    const cssH = Math.max(1, wrap.scrollHeight);
+
+    // Protecció d'estabilitat per a iOS Safari / WebKit (límit de 16 MP per element <canvas>)
+    const MAX_CANVAS_PIXELS = 12000000;
+    const MAX_CANVAS_DIM = 8192;
+    let scale = Math.min(1, MAX_CANVAS_DIM / cssW, MAX_CANVAS_DIM / cssH);
+    if (cssW * scale * cssH * scale > MAX_CANVAS_PIXELS) {
+      scale = Math.min(scale, Math.sqrt(MAX_CANVAS_PIXELS / (cssW * cssH)));
+    }
+    overlayCanvasScale = scale;
+
+    const backW = Math.max(1, Math.round(cssW * scale));
+    const backH = Math.max(1, Math.round(cssH * scale));
+
+    inkCanvas.style.width = `${cssW}px`;
+    inkCanvas.style.height = `${cssH}px`;
+    laserCanvas.style.width = `${cssW}px`;
+    laserCanvas.style.height = `${cssH}px`;
+
+    if (inkCanvas.width !== backW || inkCanvas.height !== backH) {
+      inkCanvas.width = backW;
+      inkCanvas.height = backH;
       redrawAnnotations();
     }
-    if (laserCanvas.width !== w || laserCanvas.height !== h) {
-      laserCanvas.width = w;
-      laserCanvas.height = h;
+    if (laserCanvas.width !== backW || laserCanvas.height !== backH) {
+      laserCanvas.width = backW;
+      laserCanvas.height = backH;
     }
   }
 
@@ -2633,7 +3133,10 @@
     const page = getActivePage();
     if (!inkCanvas) return;
     const ctx = inkCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, inkCanvas.width, inkCanvas.height);
+    ctx.setTransform(overlayCanvasScale, 0, 0, overlayCanvasScale, 0, 0);
 
     const strokes = (page && page.inkStrokes) || [];
     ctx.lineCap = 'round';
@@ -2641,7 +3144,7 @@
 
     for (const st of strokes) {
       if (!st.points || st.points.length === 0) continue;
-      ctx.strokeStyle = st.color;
+      ctx.strokeStyle = sanitizeColor(st.color, '#ef4444');
       ctx.lineWidth = st.width || 2.8;
       ctx.beginPath();
       ctx.moveTo(st.points[0].x, st.points[0].y);
@@ -2655,7 +3158,7 @@
     }
   }
 
-  // Temporitzador de classe
+  // Temporitzador
   function formatTimer(sec) {
     const m = Math.floor(Math.abs(sec) / 60);
     const s = Math.abs(sec) % 60;
@@ -2700,12 +3203,50 @@
   }
 
   // ============================================================================
-  // 10. Tema, Zoom, Visibilitat de Panells i Vinculació d'Esdeveniments
+  // 10. Configuració, Tipografia, Tema, Zoom, Panells i Esdeveniments
   // ============================================================================
+  function updateSettingsModalUI() {
+    // 1. Targetes de tipografia
+    document.querySelectorAll('#settingsFontGrid .font-choice-card').forEach(card => {
+      card.classList.toggle('active', card.dataset.font === state.textFont);
+    });
+
+    // 2. Controls segmentats
+    document.querySelectorAll('#settingsModal .seg-control[data-setting]').forEach(ctrl => {
+      const key = ctrl.dataset.setting;
+      const curVal = String(state[key]);
+      ctrl.querySelectorAll('.seg-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.val === curVal);
+      });
+    });
+  }
+
   function applyThemeAndZoom() {
     document.body.classList.toggle('dark-theme', state.darkMode);
     const themeBtn = document.getElementById('btnThemeToggle');
     if (themeBtn) themeBtn.textContent = state.darkMode ? '☀️' : '🌙';
+
+    // Tipografia, interlineat, amplada de pissarra, pauta de fons i numeració
+    const fontCss = FONT_STACKS[state.textFont] || FONT_STACKS.jakarta;
+    const lhCss = LINE_HEIGHT_VALUES[state.textLineHeight] || LINE_HEIGHT_VALUES.normal;
+    const widthCss = BOARD_WIDTH_VALUES[state.boardWidth] || BOARD_WIDTH_VALUES.full;
+
+    document.documentElement.style.setProperty('--font-plain-text', fontCss);
+    document.documentElement.style.setProperty('--text-line-height', lhCss);
+    document.documentElement.style.setProperty('--board-max-width', widthCss);
+
+    document.body.dataset.boardPattern = state.boardPattern || 'plain';
+    document.body.dataset.boardWidth = state.boardWidth || 'full';
+    document.body.dataset.hideApartatNums = state.showApartatNumbers ? 'false' : 'true';
+
+    // Sincronitza opcions numèriques amb el Motor Matemàtic
+    if (window.MathEngine && typeof window.MathEngine.setFormatOptions === 'function') {
+      window.MathEngine.setFormatOptions({
+        decimalPlaces: state.decimalPlaces,
+        preferFractions: state.preferFractions,
+        decimalComma: state.decimalComma
+      });
+    }
 
     const mPx = ZOOM_MATH_SIZES[state.zoomIndex] || 22;
     const tPx = ZOOM_TEXT_SIZES[state.zoomIndex] || 15.5;
@@ -2715,6 +3256,8 @@
     const pct = Math.round((mPx / ZOOM_MATH_SIZES[DEFAULT_ZOOM_INDEX]) * 100);
     const zoomLbl = document.getElementById('zoomLabel');
     if (zoomLbl) zoomLbl.textContent = `${pct}%`;
+    const settingsZoomLbl = document.getElementById('settingsZoomVal');
+    if (settingsZoomLbl) settingsZoomLbl.textContent = `${pct}%`;
 
     document.getElementById('btnRad')?.classList.toggle('active', state.angleMode === 'RAD');
     document.getElementById('btnDeg')?.classList.toggle('active', state.angleMode === 'DEG');
@@ -2723,6 +3266,7 @@
     document.getElementById('btnScopeSection')?.classList.toggle('active', state.scoreboardScope === 'section');
     document.getElementById('btnScopePage')?.classList.toggle('active', state.scoreboardScope === 'page');
 
+    updateSettingsModalUI();
     updatePanelsVisibility();
     requestAnimationFrame(() => {
       autoResizeAllTextareas();
@@ -2731,6 +3275,10 @@
   }
 
   function updatePanelsVisibility() {
+    if (isMobileViewport() && state.notebooksSidebarOpen && !state.scoreboardCollapsed) {
+      state.scoreboardCollapsed = true;
+    }
+
     const nbPanel = document.getElementById('notebooksSidebar');
     const nbBtn = document.getElementById('btnToggleNotebooks');
     if (nbPanel && nbBtn) {
@@ -2745,6 +3293,12 @@
       sbBtn.classList.toggle('active', !state.scoreboardCollapsed);
     }
 
+    const backdrop = document.getElementById('mobileDrawerBackdrop');
+    if (backdrop) {
+      const anyDrawerOpen = isMobileViewport() && (state.notebooksSidebarOpen || !state.scoreboardCollapsed);
+      backdrop.classList.toggle('visible', anyDrawerOpen);
+    }
+
     const dock = document.getElementById('keypadDock');
     const kpBtn = document.getElementById('btnToggleKeypad');
     if (dock && kpBtn) {
@@ -2754,9 +3308,12 @@
   }
 
   function bindUIEvents() {
-    // Panell de Llibretes i Breadcrumb
+    // Panell de Llibretes, Breadcrumb i Fons tàctil de calaixos en mòbil/tauleta
     const toggleNb = () => {
       state.notebooksSidebarOpen = !state.notebooksSidebarOpen;
+      if (state.notebooksSidebarOpen && isMobileViewport()) {
+        state.scoreboardCollapsed = true;
+      }
       saveState({ contentChanged: false, silentPill: true });
       updatePanelsVisibility();
       requestAnimationFrame(() => { autoResizeAllTextareas(); resizeOverlayCanvases(); });
@@ -2764,11 +3321,17 @@
     document.getElementById('btnToggleNotebooks')?.addEventListener('click', toggleNb);
     document.getElementById('breadcrumbBar')?.addEventListener('click', toggleNb);
 
+    document.getElementById('mobileDrawerBackdrop')?.addEventListener('click', () => {
+      state.notebooksSidebarOpen = false;
+      state.scoreboardCollapsed = true;
+      updatePanelsVisibility();
+    });
+
     document.getElementById('btnNewNotebook')?.addEventListener('click', createNewNotebook);
 
     document.getElementById('btnLoadShowcaseTour')?.addEventListener('click', () => {
-      // Cerca si ja existeix el Tour o en crea una pàgina nova fresca a la llibreta actual!
       const nb = getActiveNotebook();
+      if (!nb) return;
       const newShowcasePg = {
         id: uid('page'),
         title: '🌟 Tour Complet (Totes les funcions)',
@@ -2785,24 +3348,28 @@
     // Accions ràpides de creació de blocs a la barra superior
     document.getElementById('btnAddApartatTop')?.addEventListener('click', () => {
       const page = getActivePage();
+      if (!page) return;
       const afterId = state.activeBlockId || page.blocks[page.blocks.length - 1]?.id;
       insertNewApartatAfter(afterId, 'math');
     });
 
     document.getElementById('btnAddTextInApTop')?.addEventListener('click', () => {
       const page = getActivePage();
+      if (!page) return;
       const blkId = state.activeBlockId || page.blocks[page.blocks.length - 1]?.id;
       insertItemInApartat(blkId, state.activeItemId, 'text');
     });
 
     document.getElementById('btnAddSectionTop')?.addEventListener('click', () => {
       const page = getActivePage();
+      if (!page) return;
       const afterId = state.activeBlockId || page.blocks[page.blocks.length - 1]?.id;
       insertSectionAfter(afterId);
     });
 
     document.getElementById('whiteboardTail')?.addEventListener('click', () => {
       const page = getActivePage();
+      if (!page) return;
       const lastBlk = page.blocks[page.blocks.length - 1];
       insertNewApartatAfter(lastBlk?.id, 'math');
     });
@@ -2837,7 +3404,7 @@
 
     document.querySelectorAll('.ink-color-dot').forEach(dot => {
       dot.addEventListener('click', () => {
-        state.inkColor = dot.dataset.color;
+        state.inkColor = sanitizeColor(dot.dataset.color, '#ef4444');
         document.querySelectorAll('.ink-color-dot').forEach(d => d.classList.toggle('active', d === dot));
       });
     });
@@ -2869,8 +3436,16 @@
     const timerPopover = document.getElementById('timerPopover');
     document.getElementById('btnTimerToggle')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
+      document.getElementById('cloudPopover')?.classList.remove('open');
       timerPopover?.classList.toggle('open');
       updateTimerUI();
+    });
+    document.addEventListener('click', (ev) => {
+      if (!timerPopover || !timerPopover.classList.contains('open')) return;
+      const btnT = document.getElementById('btnTimerToggle');
+      if (!timerPopover.contains(ev.target) && ev.target !== btnT) {
+        timerPopover.classList.remove('open');
+      }
     });
     document.querySelectorAll('[data-timer-sec]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -2890,22 +3465,99 @@
     document.getElementById('btnTimerStartPause')?.addEventListener('click', toggleTimerRun);
     document.getElementById('btnTimerClose')?.addEventListener('click', () => timerPopover?.classList.remove('open'));
 
-    // Zoom i Tema
-    document.getElementById('btnZoomOut')?.addEventListener('click', () => {
-      if (state.zoomIndex > 0) { state.zoomIndex--; saveState({ contentChanged: false, silentPill: true }); applyThemeAndZoom(); }
-    });
-    document.getElementById('btnZoomIn')?.addEventListener('click', () => {
-      if (state.zoomIndex < ZOOM_MATH_SIZES.length - 1) { state.zoomIndex++; saveState({ contentChanged: false, silentPill: true }); applyThemeAndZoom(); }
-    });
+    // Zoom i Tema (sincronitzats amb Drive)
+    const changeZoomBy = (delta) => {
+      const next = Math.max(0, Math.min(ZOOM_MATH_SIZES.length - 1, state.zoomIndex + delta));
+      if (next !== state.zoomIndex) {
+        state.zoomIndex = next;
+        saveState({ contentChanged: true, skipPageTimestamp: true, silentPill: true });
+        applyThemeAndZoom();
+      }
+    };
+    document.getElementById('btnZoomOut')?.addEventListener('click', () => changeZoomBy(-1));
+    document.getElementById('btnZoomIn')?.addEventListener('click', () => changeZoomBy(1));
+    document.getElementById('btnSettingsZoomOut')?.addEventListener('click', () => changeZoomBy(-1));
+    document.getElementById('btnSettingsZoomIn')?.addEventListener('click', () => changeZoomBy(1));
+
     document.getElementById('btnThemeToggle')?.addEventListener('click', () => {
       state.darkMode = !state.darkMode;
-      saveState({ contentChanged: false, silentPill: true });
+      saveState({ contentChanged: true, skipPageTimestamp: true, silentPill: true });
       applyThemeAndZoom();
+      if (state.graphOpen) drawGraphCanvas();
+    });
+
+    // Modal de Configuració General d'Aritmètic
+    const settingsModal = document.getElementById('settingsModal');
+    const openSettingsModal = () => {
+      updateSettingsModalUI();
+      settingsModal?.classList.add('open');
+    };
+    const closeSettingsModal = () => settingsModal?.classList.remove('open');
+
+    document.getElementById('btnOpenSettings')?.addEventListener('click', openSettingsModal);
+    document.getElementById('btnCloseSettings')?.addEventListener('click', closeSettingsModal);
+    document.getElementById('btnDoneSettings')?.addEventListener('click', closeSettingsModal);
+    settingsModal?.addEventListener('click', (ev) => {
+      if (ev.target === settingsModal) closeSettingsModal();
+    });
+
+    document.querySelectorAll('#settingsFontGrid .font-choice-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const fontKey = card.dataset.font;
+        if (fontKey && Object.prototype.hasOwnProperty.call(FONT_STACKS, fontKey)) {
+          state.textFont = fontKey;
+          saveState({ contentChanged: true, skipPageTimestamp: true });
+          applyThemeAndZoom();
+        }
+      });
+    });
+
+    document.querySelectorAll('#settingsModal .seg-control[data-setting]').forEach(ctrl => {
+      const key = ctrl.dataset.setting;
+      ctrl.querySelectorAll('.seg-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const rawVal = btn.dataset.val;
+          let needsMathReeval = false;
+          if (rawVal === 'true' || rawVal === 'false') {
+            state[key] = rawVal === 'true';
+          } else if (key === 'decimalPlaces' || key === 'inkStrokeWidth') {
+            state[key] = Number(rawVal);
+          } else {
+            state[key] = rawVal;
+          }
+
+          if (
+            key === 'angleMode' ||
+            key === 'preferFractions' ||
+            key === 'decimalPlaces' ||
+            key === 'decimalComma' ||
+            key === 'showInlineQuickEval'
+          ) {
+            needsMathReeval = true;
+          }
+
+          saveState({ contentChanged: true, skipPageTimestamp: true });
+          applyThemeAndZoom();
+          if (needsMathReeval) runAnalysisNow();
+          if (state.graphOpen) drawGraphCanvas();
+        });
+      });
+    });
+
+    document.getElementById('btnResetSettings')?.addEventListener('click', () => {
+      applySettingsToState(DEFAULT_SETTINGS, { includePanelLayout: false });
+      saveState({ contentChanged: true, skipPageTimestamp: true });
+      applyThemeAndZoom();
+      runAnalysisNow();
+      if (state.graphOpen) drawGraphCanvas();
     });
 
     // Scoreboard i Àmbits
     document.getElementById('btnToggleScoreboard')?.addEventListener('click', () => {
       state.scoreboardCollapsed = !state.scoreboardCollapsed;
+      if (!state.scoreboardCollapsed && isMobileViewport()) {
+        state.notebooksSidebarOpen = false;
+      }
       saveState({ contentChanged: false, silentPill: true });
       updatePanelsVisibility();
       requestAnimationFrame(() => { autoResizeAllTextareas(); resizeOverlayCanvases(); });
@@ -2915,7 +3567,7 @@
       const btnId = sc === 'apartat' ? 'btnScopeApartat' : sc === 'section' ? 'btnScopeSection' : 'btnScopePage';
       document.getElementById(btnId)?.addEventListener('click', () => {
         state.scoreboardScope = sc;
-        saveState({ contentChanged: false, silentPill: true });
+        saveState({ contentChanged: true, skipPageTimestamp: true, silentPill: true });
         applyThemeAndZoom();
         runAnalysisNow();
       });
@@ -2938,8 +3590,10 @@
     // Modal de Desar / Importar Continguts
     const saveModal = document.getElementById('saveModal');
     document.getElementById('btnOpenSaveModal')?.addEventListener('click', () => {
-      document.getElementById('saveActiveNbName').textContent = getActiveNotebook()?.title || '';
-      document.getElementById('saveActivePgName').textContent = getActivePage()?.title || '';
+      const nbEl = document.getElementById('saveActiveNbName');
+      const pgEl = document.getElementById('saveActivePgName');
+      if (nbEl) nbEl.textContent = getActiveNotebook()?.title || '';
+      if (pgEl) pgEl.textContent = getActivePage()?.title || '';
       saveModal?.classList.add('open');
     });
     document.getElementById('btnCloseSaveModal')?.addEventListener('click', () => saveModal?.classList.remove('open'));
@@ -2973,6 +3627,11 @@
     fileInput?.addEventListener('change', () => {
       const file = fileInput.files && fileInput.files[0];
       if (!file) return;
+      if (file.size > 20 * 1024 * 1024) {
+        alert('El fitxer és massa gran (màxim 20 MB).');
+        fileInput.value = '';
+        return;
+      }
       const reader = new FileReader();
       reader.onload = () => {
         try {
@@ -2988,10 +3647,16 @@
 
     // Controls barra teclat inferior
     document.getElementById('btnRad')?.addEventListener('click', () => {
-      state.angleMode = 'RAD'; saveState(); applyThemeAndZoom(); runAnalysisNow();
+      state.angleMode = 'RAD';
+      saveState({ contentChanged: true, skipPageTimestamp: true });
+      applyThemeAndZoom();
+      runAnalysisNow();
     });
     document.getElementById('btnDeg')?.addEventListener('click', () => {
-      state.angleMode = 'DEG'; saveState(); applyThemeAndZoom(); runAnalysisNow();
+      state.angleMode = 'DEG';
+      saveState({ contentChanged: true, skipPageTimestamp: true });
+      applyThemeAndZoom();
+      runAnalysisNow();
     });
     document.getElementById('btnUndo')?.addEventListener('mousedown', e => e.preventDefault());
     document.getElementById('btnUndo')?.addEventListener('click', () => {
@@ -3034,6 +3699,21 @@
     helpModal?.addEventListener('click', (ev) => {
       if (ev.target === helpModal) helpModal.classList.remove('open');
     });
+
+    // Tecla Escape tanca modals i popovers oberts
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') {
+        settingsModal?.classList.remove('open');
+        saveModal?.classList.remove('open');
+        helpModal?.classList.remove('open');
+        if (state.graphOpen) {
+          state.graphOpen = false;
+          graphModal?.classList.remove('open');
+        }
+        timerPopover?.classList.remove('open');
+        document.getElementById('cloudPopover')?.classList.remove('open');
+      }
+    });
   }
 
   // ============================================================================
@@ -3068,13 +3748,18 @@
     return !(it.latex || '').trim() && !(it.text || '').trim();
   }
 
+  const STARTER_NB1_TITLES = new Set(['📘 Apunts i Càlculs', '📘 Classes 1r Batxillerat']);
+  const STARTER_NB2_TITLES = new Set(['📗 Àlgebra i Anàlisi', '📗 Classes 2n Batxillerat (PAU)']);
+  const STARTER_PG1_TITLES = new Set(['Pàgina 1 — Espai de treball', 'Classe 1 — Pissarra nova']);
+  const STARTER_PG2_TITLES = new Set(['Sistemes i Funcions', 'Àlgebra i Anàlisi']);
+
   function isUntouchedStarterWorkspace() {
     const nbs = state.notebooks;
     if (!Array.isArray(nbs) || nbs.length !== 3) return false;
     if (
       nbs[0].title !== '🎓 Guia Completa i Exemples' ||
-      nbs[1].title !== '📘 Classes 1r Batxillerat' ||
-      nbs[2].title !== '📗 Classes 2n Batxillerat (PAU)'
+      !STARTER_NB1_TITLES.has(nbs[1].title) ||
+      !STARTER_NB2_TITLES.has(nbs[2].title)
     ) {
       return false;
     }
@@ -3089,12 +3774,12 @@
     if (JSON.stringify(stripBlockIds(tourPg.blocks)) !== expectedTour) return false;
 
     if (nbs[0].pages[1].title !== '📝 Pàgina de proves en blanc' || !isBlankStarterPage(nbs[0].pages[1])) return false;
-    if (nbs[1].pages[0].title !== 'Classe 1 — Pissarra nova' || !isBlankStarterPage(nbs[1].pages[0])) return false;
-    if (nbs[2].pages[0].title !== 'Àlgebra i Anàlisi' || !isBlankStarterPage(nbs[2].pages[0])) return false;
+    if (!STARTER_PG1_TITLES.has(nbs[1].pages[0].title) || !isBlankStarterPage(nbs[1].pages[0])) return false;
+    if (!STARTER_PG2_TITLES.has(nbs[2].pages[0].title) || !isBlankStarterPage(nbs[2].pages[0])) return false;
     return true;
   }
 
-  function getNotebooksFingerprint(notebooks) {
+  function getNotebooksOnlyFingerprint(notebooks) {
     const normalized = (notebooks || []).map(nb => ({
       title: nb.title || '',
       color: nb.color || '',
@@ -3108,15 +3793,26 @@
     return JSON.stringify(normalized);
   }
 
+  function getWorkspaceSyncFingerprint(notebooks, settingsSource) {
+    return JSON.stringify({
+      notebooks: JSON.parse(getNotebooksOnlyFingerprint(notebooks)),
+      settings: getSyncedSettingsSnapshot(settingsSource || DEFAULT_SETTINGS)
+    });
+  }
+
   function applyCloudSnapshot(data, mode = 'replace') {
     if (!data || !Array.isArray(data.notebooks) || data.notebooks.length === 0) return false;
-    const incoming = deepClone(data.notebooks);
+    const incoming = sanitizeNotebooksList(deepClone(data.notebooks));
+    if (incoming.length === 0) return false;
+    if (data.tourVersion !== TOUR_VERSION) {
+      migrateLegacyStarterTitles(incoming);
+    }
 
     if (mode === 'merge') {
-      const existingFingerprints = new Set(state.notebooks.map(n => getNotebooksFingerprint([n])));
+      const existingFingerprints = new Set(state.notebooks.map(n => getNotebooksOnlyFingerprint([n])));
       let addedCount = 0;
       incoming.forEach((nb) => {
-        const fp = getNotebooksFingerprint([nb]);
+        const fp = getNotebooksOnlyFingerprint([nb]);
         if (!existingFingerprints.has(fp)) {
           if (state.notebooks.some(existing => existing.id === nb.id)) {
             nb.id = uid('nb');
@@ -3136,11 +3832,7 @@
       state.expandedNotebookIds.clear();
       state.notebooks.forEach(n => state.expandedNotebookIds.add(n.id));
 
-      const s = data.settings || {};
-      if (s.angleMode) state.angleMode = s.angleMode;
-      if (s.scoreboardScope) state.scoreboardScope = s.scoreboardScope;
-      if (s.darkMode !== undefined) state.darkMode = Boolean(s.darkMode);
-      if (typeof s.zoomIndex === 'number') state.zoomIndex = s.zoomIndex;
+      applySettingsToState(data.settings || {}, { includePanelLayout: false });
 
       const targetNb = getNotebookById(data.activeNotebookId) || state.notebooks[0];
       state.activeNotebookId = targetNb.id;
@@ -3160,15 +3852,17 @@
 
   function resetToStarterWorkspace() {
     const nbGuide = createShowcaseNotebook();
-    const nb1r = createStarterClassesNotebook();
-    const nb2n = createStarter2nBatxNotebook();
-    state.notebooks = [nbGuide, nb1r, nb2n];
+    const nbGen = createStarterGeneralNotebook();
+    const nbAlg = createStarterAlgebraNotebook();
+    state.notebooks = [nbGuide, nbGen, nbAlg];
     state.activeNotebookId = nbGuide.id;
     state.activePageId = nbGuide.pages[0].id;
     state.expandedNotebookIds.clear();
     state.notebooks.forEach(n => state.expandedNotebookIds.add(n.id));
+    applySettingsToState(DEFAULT_SETTINGS, { includePanelLayout: false });
     selectDefaultActiveItem(getActivePage());
     saveState({ fromCloud: true, isInitialSeed: true, pillMessage: 'Dispositiu netejat ✓' });
+    applyThemeAndZoom();
     renderNotebooksSidebar();
     renderBoardBlocks();
     redrawAnnotations();
@@ -3179,8 +3873,16 @@
     applyCloudSnapshot,
     resetToStarterWorkspace,
     isUntouchedStarterWorkspace,
-    getNotebooksFingerprint: () => getNotebooksFingerprint(state.notebooks),
-    computeExternalFingerprint: (nbs) => getNotebooksFingerprint(nbs),
+    getNotebooksFingerprint: () => getWorkspaceSyncFingerprint(state.notebooks, state),
+    computeExternalFingerprint: (dataOrNbs) => {
+      if (Array.isArray(dataOrNbs)) {
+        return getWorkspaceSyncFingerprint(dataOrNbs, DEFAULT_SETTINGS);
+      }
+      if (dataOrNbs && typeof dataOrNbs === 'object') {
+        return getWorkspaceSyncFingerprint(dataOrNbs.notebooks || [], dataOrNbs.settings || DEFAULT_SETTINGS);
+      }
+      return '';
+    },
     flashAutosaveIndicator,
     onLocalSave: (fn) => {
       if (typeof fn === 'function') localSaveListeners.push(fn);
@@ -3194,6 +3896,16 @@
     }
 
     loadState();
+
+    // En obrir l'app des de mòbil o tauleta, comencem amb els calaixos laterals plegats perquè es vegi la pissarra neta
+    if (isMobileViewport()) {
+      state.notebooksSidebarOpen = false;
+      state.scoreboardCollapsed = true;
+    }
+    if (window.innerHeight < 600) {
+      state.keypadCollapsed = true;
+    }
+
     selectDefaultActiveItem(getActivePage());
 
     bindUIEvents();
@@ -3208,6 +3920,7 @@
     if (document.fonts && document.fonts.ready) {
       document.fonts.ready.then(() => {
         fitKeypadButtonLabels();
+        autoResizeAllTextareas();
       });
     }
   }

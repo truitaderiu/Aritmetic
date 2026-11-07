@@ -2,10 +2,14 @@
 <html lang="ca">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Aritmètic · Batxillerat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <title>Aritmètic</title>
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <link rel="alternate icon" type="image/png" href="assets/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" />
   <link rel="stylesheet" href="vendor/mathlive/mathlive-fonts.css" />
   <link rel="stylesheet" href="vendor/mathlive/mathlive-static.css" />
   <link rel="stylesheet" href="css/styles.css" />
@@ -16,12 +20,12 @@
     <!-- Barra Superior -->
     <header class="topbar">
       <div class="topbar-left">
-        <div class="brand" title="Aritmètic · Matemàtiques de Batxillerat">
+        <div class="brand" title="Aritmètic · Pissarra i càlcul matemàtic">
           <img src="assets/logo.svg" alt="=" class="brand-logo" />
-          <span>Aritmètic</span>
+          <span class="brand-title-text">Aritmètic</span>
         </div>
 
-        <button class="tb-btn active" id="btnToggleNotebooks" title="Mostrar o amagar el panell de Llibretes i Pàgines">📚 Llibretes</button>
+        <button class="tb-btn active" id="btnToggleNotebooks" title="Mostrar o amagar el panell de Llibretes i Pàgines">📚 <span class="tb-label">Llibretes</span></button>
 
         <div class="breadcrumb-bar" id="breadcrumbBar" title="Clica per obrir o tancar el navegador de llibretes i pàgines">
           <span class="breadcrumb-nb" id="breadcrumbNb">Llibreta</span>
@@ -31,10 +35,10 @@
       </div>
 
       <div class="topbar-right">
-        <div class="toolbar-group">
-          <button class="tb-btn" id="btnAddApartatTop" title="Crear un nou apartat a sota (Cmd/Ctrl + Enter)">⊞ Apartat</button>
-          <button class="tb-btn" id="btnAddTextInApTop" title="Afegir un bloc de text amb salt de línia automàtic dins l'apartat actual (Alt + T)">¶ Text</button>
-          <button class="tb-btn" id="btnAddSectionTop" title="Inserir un títol de tema o d'exercici nou">§ Secció</button>
+        <div class="toolbar-group" id="insertToolbarGroup">
+          <button class="tb-btn" id="btnAddApartatTop" title="Crear un nou apartat a sota (Cmd/Ctrl + Enter)">⊞ <span class="tb-label">Apartat</span></button>
+          <button class="tb-btn" id="btnAddTextInApTop" title="Afegir un bloc de text amb salt de línia automàtic dins l'apartat actual (Alt + T)">¶ <span class="tb-label">Text</span></button>
+          <button class="tb-btn" id="btnAddSectionTop" title="Inserir un títol de tema o d'exercici nou">§ <span class="tb-label">Secció</span></button>
         </div>
 
         <div class="toolbar-group">
@@ -59,14 +63,14 @@
           </div>
         </div>
 
-        <div class="toolbar-group" title="Mida de lletra i fórmules per compartir pantalla">
+        <div class="toolbar-group zoom-toolbar-group" title="Mida de lletra i fórmules">
           <button class="tb-btn" id="btnZoomOut" aria-label="Reduir mida">A−</button>
           <span class="zoom-label" id="zoomLabel">100%</span>
           <button class="tb-btn" id="btnZoomIn" aria-label="Augmentar mida">A+</button>
         </div>
 
         <div class="toolbar-group" id="cloudToolbarGroup">
-          <button class="tb-btn" id="btnCloudDrive" title="Connecta el teu Google Drive personal per sincronitzar les llibretes">
+          <button class="tb-btn" id="btnCloudDrive" title="Connecta el teu Google Drive personal per sincronitzar llibretes i ajustos">
             <span class="cloud-status-dot offline"></span><span>☁️ Drive</span>
           </button>
 
@@ -83,9 +87,10 @@
         <div class="toolbar-group">
           <button class="tb-btn icon-only" id="btnOpenSaveModal" data-tooltip="Desar / Obrir" aria-label="Desar / Obrir">💾</button>
           <button class="tb-btn icon-only active" id="btnToggleScoreboard" data-tooltip="Variables" aria-label="Variables">📊</button>
-          <button class="tb-btn" id="btnPrintPdf" title="Imprimir o desar com a PDF net per enviar a l'alumne">🖨️ PDF</button>
-          <button class="tb-btn" id="btnThemeToggle" title="Canviar entre mode clar i pissarra fosca">🌙</button>
-          <button class="tb-btn" id="btnHelp" title="Dreceres de teclat ràpides">?</button>
+          <button class="tb-btn" id="btnPrintPdf" title="Imprimir o desar com a PDF net">🖨️ <span class="tb-label">PDF</span></button>
+          <button class="tb-btn icon-only" id="btnOpenSettings" data-tooltip="Configuració" aria-label="Configuració">⚙️</button>
+          <button class="tb-btn icon-only" id="btnThemeToggle" title="Canviar entre mode clar i pissarra fosca" aria-label="Tema">🌙</button>
+          <button class="tb-btn hide-on-mobile" id="btnHelp" title="Dreceres de teclat ràpides">?</button>
         </div>
       </div>
     </header>
@@ -104,6 +109,9 @@
 
     <!-- Espai Central en 3 Columnes: Llibretes | Pissarra d'Apartats | Scoreboard -->
     <main class="workspace-main">
+      <!-- Fons fosc tàctil per tancar calaixos laterals en mòbil/tauleta -->
+      <div class="mobile-drawer-backdrop" id="mobileDrawerBackdrop"></div>
+
       <!-- Panell Esquerre: Llibretes i Pàgines -->
       <aside class="notebooks-sidebar" id="notebooksSidebar" aria-label="Llibretes i pàgines">
         <div class="nb-sidebar-header">
@@ -304,6 +312,233 @@
       <button class="secondary-action-btn" style="width:100%;" id="btnConflictMerge">
         ➕ Combinar totes les llibretes (sense esborrar res)
       </button>
+    </div>
+  </div>
+
+  <!-- Modal 5: Configuració General d'Aritmètic (Sincronitzada amb Google Drive) -->
+  <div class="modal-backdrop" id="settingsModal">
+    <div class="modal-card settings-modal-card">
+      <div class="modal-header">
+        <h2>⚙️ Configuració d'Aritmètic</h2>
+        <button class="row-icon-btn" id="btnCloseSettings" aria-label="Tancar">✕</button>
+      </div>
+
+      <div class="settings-sections">
+        <!-- Secció 1: Tipografia del Text Pla -->
+        <section class="settings-section">
+          <div class="settings-section-title">✒️ Tipografia del text i apunts</div>
+          <div class="font-cards-grid" id="settingsFontGrid">
+            <button type="button" class="font-choice-card" data-font="jakarta" style="font-family:'Plus Jakarta Sans','Avenir Next',sans-serif;">
+              <span class="font-choice-sample">Aa Bb 123</span>
+              <span class="font-choice-name">Plus Jakarta Sans</span>
+              <span class="font-choice-tag">Moderna i equilibrada</span>
+            </button>
+            <button type="button" class="font-choice-card" data-font="lora" style="font-family:'Lora',Georgia,serif;">
+              <span class="font-choice-sample">Aa Bb 123</span>
+              <span class="font-choice-name">Lora Editorial</span>
+              <span class="font-choice-tag">Llibre acadèmic (Serif)</span>
+            </button>
+            <button type="button" class="font-choice-card" data-font="atkinson" style="font-family:'Atkinson Hyperlegible',Verdana,sans-serif;">
+              <span class="font-choice-sample">Aa Il1 0O</span>
+              <span class="font-choice-name">Atkinson Hyperlegible</span>
+              <span class="font-choice-tag">Màxima claredat visual</span>
+            </button>
+            <button type="button" class="font-choice-card" data-font="inter" style="font-family:'Inter',-apple-system,sans-serif;">
+              <span class="font-choice-sample">Aa Bb 123</span>
+              <span class="font-choice-name">Inter</span>
+              <span class="font-choice-tag">Neta i tècnica</span>
+            </button>
+            <button type="button" class="font-choice-card" data-font="merriweather" style="font-family:'Merriweather',Palatino,serif;">
+              <span class="font-choice-sample">Aa Bb 123</span>
+              <span class="font-choice-name">Merriweather</span>
+              <span class="font-choice-tag">Clàssica de lectura</span>
+            </button>
+            <button type="button" class="font-choice-card" data-font="jetbrains" style="font-family:'JetBrains Mono',Menlo,monospace;">
+              <span class="font-choice-sample">Aa 0123 =</span>
+              <span class="font-choice-name">JetBrains Mono</span>
+              <span class="font-choice-tag">Monoespai científic</span>
+            </button>
+          </div>
+
+          <div class="font-live-preview" id="settingsFontPreview">
+            Sigui f(x) una funció contínua i derivable en l'interval obert (a, b). Aleshores existeix un punt c on el pendent de la recta tangent coincideix amb la taxa de variació mitjana.
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Interlineat dels blocs de text</div>
+              <div class="settings-row-sub">Espai vertical entre línies dins dels paràgrafs</div>
+            </div>
+            <div class="seg-control" data-setting="textLineHeight">
+              <button type="button" class="seg-btn" data-val="compact">Compacte</button>
+              <button type="button" class="seg-btn" data-val="normal">Estàndard</button>
+              <button type="button" class="seg-btn" data-val="relaxed">Ampli</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Secció 2: Aspecte de la Pissarra -->
+        <section class="settings-section">
+          <div class="settings-section-title">🎨 Aspecte visual i pissarra</div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Tema de colors</div>
+              <div class="settings-row-sub"> Alterna entre fons clar de paper i pissarra fosca</div>
+            </div>
+            <div class="seg-control" data-setting="darkMode">
+              <button type="button" class="seg-btn" data-val="false">☀️ Clar</button>
+              <button type="button" class="seg-btn" data-val="true">🌙 Fosc</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Pauta de fons de la pissarra</div>
+              <div class="settings-row-sub">Guia visual subtil darrere de les equacions</div>
+            </div>
+            <div class="seg-control" data-setting="boardPattern">
+              <button type="button" class="seg-btn" data-val="plain">Llis</button>
+              <button type="button" class="seg-btn" data-val="grid">Quadrícula</button>
+              <button type="button" class="seg-btn" data-val="dots">Punts</button>
+              <button type="button" class="seg-btn" data-val="ruled">Ratllat</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Amplada del full de treball</div>
+              <div class="settings-row-sub">Centra els apartats en pantalles grans o ocupa tota l'amplada</div>
+            </div>
+            <div class="seg-control" data-setting="boardWidth">
+              <button type="button" class="seg-btn" data-val="full">100%</button>
+              <button type="button" class="seg-btn" data-val="wide">Ampla</button>
+              <button type="button" class="seg-btn" data-val="reading">Lectura</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Mida general de fórmules i text</div>
+              <div class="settings-row-sub">Escala visual per a l'escriptura i compartició de pantalla</div>
+            </div>
+            <div class="settings-zoom-ctrl">
+              <button type="button" class="secondary-action-btn" id="btnSettingsZoomOut">A−</button>
+              <span class="settings-zoom-val" id="settingsZoomVal">100%</span>
+              <button type="button" class="secondary-action-btn" id="btnSettingsZoomIn">A+</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Numeració d'apartats</div>
+              <div class="settings-row-sub">Mostra el número correlatiu (1, 2, 3…) al marge esquerre</div>
+            </div>
+            <div class="seg-control" data-setting="showApartatNumbers">
+              <button type="button" class="seg-btn" data-val="true">Mostrar</button>
+              <button type="button" class="seg-btn" data-val="false">Amagar</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Secció 3: Càlcul i Motor Matemàtic -->
+        <section class="settings-section">
+          <div class="settings-section-title">🧮 Motor matemàtic i format numèric</div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Unitat d'angles</div>
+              <div class="settings-row-sub">Per a funcions trigonomètriques (sin, cos, tan…)</div>
+            </div>
+            <div class="seg-control" data-setting="angleMode">
+              <button type="button" class="seg-btn" data-val="RAD">Radians (RAD)</button>
+              <button type="button" class="seg-btn" data-val="DEG">Graus (DEG)</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Resultats exactes al Tauler</div>
+              <div class="settings-row-sub">Mostra fraccions irreductibles, radicals i múltiples de π</div>
+            </div>
+            <div class="seg-control" data-setting="preferFractions">
+              <button type="button" class="seg-btn" data-val="true">Exacte + Decimal</button>
+              <button type="button" class="seg-btn" data-val="false">Només Decimal</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Precisió decimal màxima</div>
+              <div class="settings-row-sub">Xifres decimals en aproximacions numèriques</div>
+            </div>
+            <div class="seg-control" data-setting="decimalPlaces">
+              <button type="button" class="seg-btn" data-val="2">2</button>
+              <button type="button" class="seg-btn" data-val="4">4</button>
+              <button type="button" class="seg-btn" data-val="6">6</button>
+              <button type="button" class="seg-btn" data-val="8">8</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Separador decimal</div>
+              <div class="settings-row-sub">Coma decimal (3,14) o punt decimal (3.14)</div>
+            </div>
+            <div class="seg-control" data-setting="decimalComma">
+              <button type="button" class="seg-btn" data-val="true">Coma (3,14)</button>
+              <button type="button" class="seg-btn" data-val="false">Punt (3.14)</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Suggeriment de càlcul ràpid en línia</div>
+              <div class="settings-row-sub">Mostra el botó discret «= resultat» en operacions numèriques</div>
+            </div>
+            <div class="seg-control" data-setting="showInlineQuickEval">
+              <button type="button" class="seg-btn" data-val="true">Actiu</button>
+              <button type="button" class="seg-btn" data-val="false">Ocult</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Secció 4: Anotacions i Exportació PDF -->
+        <section class="settings-section">
+          <div class="settings-section-title">✏️ Llapis i exportació PDF</div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Gruix del llapis d'anotació</div>
+              <div class="settings-row-sub">Amplada dels traços nous fets sobre la pissarra</div>
+            </div>
+            <div class="seg-control" data-setting="inkStrokeWidth">
+              <button type="button" class="seg-btn" data-val="1.8">Fi</button>
+              <button type="button" class="seg-btn" data-val="2.8">Mitjà</button>
+              <button type="button" class="seg-btn" data-val="4.8">Gruixut</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Capçalera en generar PDF</div>
+              <div class="settings-row-sub">Inclou el nom de la llibreta, títol de pàgina i data a dalt del full A4</div>
+            </div>
+            <div class="seg-control" data-setting="pdfShowHeader">
+              <button type="button" class="seg-btn" data-val="true">Incloure</button>
+              <button type="button" class="seg-btn" data-val="false">Ometre</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="settings-footer">
+        <span class="settings-cloud-note">☁️ Els ajustos es desen i se sincronitzen automàticament amb Google Drive.</span>
+        <div class="settings-footer-btns">
+          <button type="button" class="secondary-action-btn" id="btnResetSettings">Restablir per defecte</button>
+          <button type="button" class="primary-action-btn" id="btnDoneSettings">Fet</button>
+        </div>
+      </div>
     </div>
   </div>
 
