@@ -247,17 +247,25 @@ body[data-theme="custom"] .primary-action-btn {
   font-weight: 700;
 }
 
-/* Assegura que tot el text en línia de MathLive (" -> \text{...}) adopti la tipografia, mida i salt de línia automàtic */
+/* Assegura que tot el text en línia de MathLive (" -> \text{...}) adopti la tipografia i mida sense trencar equacions ni subíndexs */
 .ML__text {
   font-family: var(--font-plain-text) !important;
   font-size: var(--inline-text-scale, 1em) !important;
-  white-space: pre-wrap !important;
-  overflow-wrap: anywhere !important;
-  word-break: break-word !important;
 }
 
 .ML__text .ML__text {
   font-size: 1em !important;
+}
+
+.print-math-row .ML__latex,
+.print-math-row .ML__base {
+  width: auto !important;
+  max-width: 100%;
+}
+
+.print-math-row .ML__base > .ML__text {
+  white-space: pre-wrap !important;
+  overflow-wrap: break-word !important;
 }
 
 * {
@@ -761,29 +769,36 @@ body.dark-theme .tb-btn[data-tooltip]::after {
 .ink-toolbar {
   display: none;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
-  gap: 8px;
-  padding: 6px 14px;
+  gap: 6px;
+  padding: 5px 10px;
   background: var(--bg-panel);
   border: 1px solid var(--accent-blue);
-  border-radius: 999px;
+  border-radius: 12px;
   box-shadow: 0 6px 22px rgba(15, 23, 42, 0.16);
   position: absolute;
-  top: 58px;
+  top: 56px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 45;
-  font-size: 12.5px;
+  font-size: 12px;
   max-width: calc(100vw - 24px);
+  white-space: nowrap;
+  overflow-x: auto;
 }
 .ink-toolbar.visible {
   display: flex;
 }
+.ink-toolbar .tb-btn {
+  padding: 3px 8px;
+  font-size: 12px;
+}
 .ink-toolbar-section {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 .ink-sep {
   width: 1px;
@@ -792,8 +807,8 @@ body.dark-theme .tb-btn[data-tooltip]::after {
   flex-shrink: 0;
 }
 .ink-color-dot {
-  width: 19px;
-  height: 19px;
+  width: 17px;
+  height: 17px;
   border-radius: 50%;
   border: 2px solid rgba(15, 23, 42, 0.14);
   cursor: pointer;
@@ -805,14 +820,14 @@ body.dark-theme .tb-btn[data-tooltip]::after {
   transform: scale(1.12);
 }
 .ink-color-dot.active {
-  transform: scale(1.18);
+  transform: scale(1.16);
   border-color: var(--text-primary);
-  box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 3.5px var(--accent-blue);
+  box-shadow: 0 0 0 1.5px var(--bg-panel), 0 0 0 3px var(--accent-blue);
 }
 .ink-custom-color-btn {
   position: relative;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: 1.5px dashed var(--border-strong);
   background: var(--bg-app);
@@ -820,7 +835,7 @@ body.dark-theme .tb-btn[data-tooltip]::after {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
   flex-shrink: 0;
   overflow: hidden;
@@ -833,7 +848,7 @@ body.dark-theme .tb-btn[data-tooltip]::after {
 .ink-custom-color-btn.active {
   border-style: solid;
   border-width: 2.5px;
-  box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 3.5px var(--accent-blue);
+  box-shadow: 0 0 0 1.5px var(--bg-panel), 0 0 0 3px var(--accent-blue);
 }
 .ink-custom-color-btn input[type="color"] {
   position: absolute;
@@ -844,8 +859,8 @@ body.dark-theme .tb-btn[data-tooltip]::after {
   cursor: pointer;
 }
 .ink-width-btn {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 6px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-app);
@@ -1345,6 +1360,7 @@ body[data-hide-apartat-nums="true"] .apartat-gutter {
   justify-content: space-between;
   gap: 8px;
   min-height: 24px;
+  position: relative;
 }
 
 .apartat-label-input {
@@ -1383,6 +1399,7 @@ body[data-hide-apartat-nums="true"] .apartat-gutter {
   position: absolute;
   top: 5px;
   right: 10px;
+  transform: none;
   z-index: 6;
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
@@ -1418,6 +1435,23 @@ body[data-hide-apartat-nums="true"] .apartat-gutter {
   opacity: 0;
   transition: opacity 0.14s ease;
   flex-shrink: 0;
+}
+
+.apartat-header > .apartat-toolbar {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-panel);
+  padding: 1px 0 1px 6px;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.apartat-block:hover .apartat-header > .apartat-toolbar,
+.apartat-block.focused .apartat-header > .apartat-toolbar {
+  pointer-events: auto;
 }
 
 .apartat-block:hover .apartat-toolbar,
@@ -3170,7 +3204,13 @@ kbd {
     pointer-events: auto;
   }
 
+  .apartat-header > .apartat-toolbar,
   .apartat-toolbar {
+    position: static;
+    transform: none;
+    pointer-events: auto;
+    background: transparent;
+    padding-left: 0;
     width: 100%;
     justify-content: flex-start;
     flex-wrap: wrap;

@@ -43,7 +43,7 @@ Quan actualitzeu el contingut de la pàgina d'exemple `🌟 Tour Complet (Totes 
 {
   "kind": "pissarra_workspace",
   "version": 2,
-  "tourVersion": 7,
+  "tourVersion": 8,
   "savedAt": "2026-11-07T12:00:00.000Z",
   "activeNotebookId": "nb_...",
   "activePageId": "page_...",

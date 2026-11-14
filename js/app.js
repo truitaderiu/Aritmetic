@@ -641,7 +641,7 @@
     };
   }
 
-  const TOUR_VERSION = 7;
+  const TOUR_VERSION = 8;
 
   function migrateLegacyStarterTitles(notebooks) {
     let changed = false;
@@ -662,6 +662,7 @@
       for (const p of n.pages || []) {
         if (p.title === '🌟 Tour Complet (Totes les funcions)') {
           p.blocks = hydrateShowcaseBlocks();
+          p.inkStrokes = [];
           changed = true;
         }
       }
@@ -1274,19 +1275,29 @@
       max-width: 100%;
     }
     .ML__container,
-    .ML__content,
-    .ML__base,
-    .ML__latex {
+    .ML__content {
       max-width: 100%;
-      white-space: normal !important;
+    }
+    .ML__latex,
+    .ML__base {
+      width: auto !important;
+      max-width: 100%;
     }
     .ML__text {
       font-family: var(--text-font-family, system-ui, sans-serif) !important;
       font-size: var(--inline-text-scale, 1em) !important;
       white-space: pre-wrap !important;
-      overflow-wrap: anywhere !important;
-      word-break: break-word !important;
-      display: inline !important;
+      overflow-wrap: break-word !important;
+      word-break: normal !important;
+    }
+    .ML__msubsup .ML__text,
+    .ML__vlist-t .ML__text,
+    .ML__mfrac .ML__text,
+    .ML__sqrt .ML__text,
+    .ML__mtable .ML__text {
+      white-space: pre !important;
+      overflow-wrap: normal !important;
+      word-break: normal !important;
     }
     .ML__text .ML__text {
       font-size: 1em !important;
@@ -1517,7 +1528,7 @@
     ed.contentEditable = 'true';
     ed.setAttribute('role', 'textbox');
     ed.setAttribute('aria-multiline', 'true');
-    ed.setAttribute('spellcheck', 'true');
+    ed.setAttribute('spellcheck', 'false');
     ed.dataset.placeholder = 'Escriu l\'enunciat, explicació o conclusió aquí (Ctrl/⌘+B negreta, Ctrl/⌘+U subratllat, Shift+Enter equació)...';
     ed.innerHTML = markdownTextToSafeHtml(item.text || '');
 
@@ -2104,7 +2115,7 @@
       header.className = `apartat-header ${!block.label ? 'empty-label' : ''}`;
 
       const btnAddTitle = document.createElement('button');
-      btnAddTitle.className = 'ap-action-btn';
+      btnAddTitle.className = 'ap-pill-btn';
       btnAddTitle.title = 'Afegir un títol opcional a aquest apartat';
       btnAddTitle.textContent = '+ Títol';
       btnAddTitle.style.display = hasTitle ? 'none' : '';
@@ -4258,16 +4269,26 @@
     const laserCanvas = document.getElementById('laserCanvas');
     if (!wrap || !inkCanvas || !laserCanvas) return;
 
+    // Col·lapsa temporalment les capes per mesurar el scroll real del contingut (evita que un canvas antic bloqui l'alçada)
+    inkCanvas.style.width = '0px';
+    inkCanvas.style.height = '0px';
+    laserCanvas.style.width = '0px';
+    laserCanvas.style.height = '0px';
+
     const cssW = Math.max(1, wrap.scrollWidth);
     const cssH = Math.max(1, wrap.scrollHeight);
 
-    // Protecció d'estabilitat per a iOS Safari / WebKit (límit de 16 MP per element <canvas>)
-    const MAX_CANVAS_PIXELS = 12000000;
-    const MAX_CANVAS_DIM = 8192;
-    let scale = Math.min(1, MAX_CANVAS_DIM / cssW, MAX_CANVAS_DIM / cssH);
+    // Escalat nítid a Retina / HiDPI amb protecció de memòria per a WebKit / iOS
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const MAX_CANVAS_PIXELS = isIOS ? 12000000 : 24000000;
+    const MAX_CANVAS_DIM = isIOS ? 8192 : 16384;
+    let scale = Math.min(dpr, MAX_CANVAS_DIM / cssW, MAX_CANVAS_DIM / cssH);
     if (cssW * scale * cssH * scale > MAX_CANVAS_PIXELS) {
       scale = Math.min(scale, Math.sqrt(MAX_CANVAS_PIXELS / (cssW * cssH)));
     }
+    const prevScale = overlayCanvasScale;
     overlayCanvasScale = scale;
 
     const backW = Math.max(1, Math.round(cssW * scale));
@@ -4278,7 +4299,7 @@
     laserCanvas.style.width = `${cssW}px`;
     laserCanvas.style.height = `${cssH}px`;
 
-    if (inkCanvas.width !== backW || inkCanvas.height !== backH) {
+    if (inkCanvas.width !== backW || inkCanvas.height !== backH || prevScale !== scale) {
       inkCanvas.width = backW;
       inkCanvas.height = backH;
       redrawAnnotations();
@@ -4304,16 +4325,33 @@
     ctx.lineJoin = 'round';
 
     for (const st of strokes) {
-      if (!st.points || st.points.length === 0) continue;
-      ctx.strokeStyle = sanitizeColor(st.color, '#ef4444');
-      ctx.lineWidth = st.width || 2.8;
-      ctx.beginPath();
-      ctx.moveTo(st.points[0].x, st.points[0].y);
-      for (let i = 1; i < st.points.length; i++) {
-        ctx.lineTo(st.points[i].x, st.points[i].y);
+      const pts = st.points;
+      if (!pts || pts.length === 0) continue;
+      const strokeColor = sanitizeColor(st.color, '#ef4444');
+      const strokeW = st.width || 2.8;
+      ctx.strokeStyle = strokeColor;
+      ctx.fillStyle = strokeColor;
+      ctx.lineWidth = strokeW;
+
+      if (pts.length === 1) {
+        ctx.beginPath();
+        ctx.arc(pts[0].x, pts[0].y, Math.max(1.2, strokeW * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+        continue;
       }
-      if (st.points.length === 1) {
-        ctx.arc(st.points[0].x, st.points[0].y, 1.5, 0, Math.PI * 2);
+
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      if (pts.length === 2) {
+        ctx.lineTo(pts[1].x, pts[1].y);
+      } else {
+        for (let i = 1; i < pts.length - 1; i++) {
+          const midX = (pts[i].x + pts[i + 1].x) * 0.5;
+          const midY = (pts[i].y + pts[i + 1].y) * 0.5;
+          ctx.quadraticCurveTo(pts[i].x, pts[i].y, midX, midY);
+        }
+        const last = pts[pts.length - 1];
+        ctx.lineTo(last.x, last.y);
       }
       ctx.stroke();
     }
