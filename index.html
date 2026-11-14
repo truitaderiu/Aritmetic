@@ -23,6 +23,7 @@
         <div class="brand" title="Aritmètic · Pissarra i càlcul matemàtic">
           <img src="assets/logo.svg" alt="=" class="brand-logo" />
           <span class="brand-title-text">Aritmètic</span>
+          <button type="button" class="version-badge" id="btnVersionHistory" title="Historial de versions i novetats d'Aritmètic">v1.1</button>
         </div>
 
         <button class="tb-btn active" id="btnToggleNotebooks" title="Mostrar o amagar el panell de Llibretes i Pàgines">📚 <span class="tb-label">Llibretes</span></button>
@@ -96,16 +97,41 @@
       </div>
     </header>
 
-    <!-- Barra flotant del Llapis d'Anotació -->
+    <!-- Barra flotant del Llapis d'Anotació (v1.1 Revamp) -->
     <div class="ink-toolbar" id="inkToolbar">
-      <strong style="margin-right:4px;">Llapis:</strong>
-      <button class="ink-color-dot active" data-color="#ef4444" style="background:#ef4444;" title="Vermell"></button>
-      <button class="ink-color-dot" data-color="#2563eb" style="background:#2563eb;" title="Blau"></button>
-      <button class="ink-color-dot" data-color="#059669" style="background:#059669;" title="Verd"></button>
-      <button class="ink-color-dot" data-color="#d97706" style="background:#d97706;" title="Àmbar"></button>
-      <button class="tb-btn" id="btnInkUndo" title="Desfer últim traç">↶ Desfer</button>
-      <button class="tb-btn" id="btnInkClear" title="Esborrar tots els traços de la pàgina">🗑️ Netejar</button>
-      <button class="tb-btn active" id="btnInkDone">Fet</button>
+      <div class="ink-toolbar-section ink-tool-modes">
+        <button type="button" class="tb-btn active" id="btnInkPenMode" title="Mode dibuixar traç">✏️ Traç</button>
+        <button type="button" class="tb-btn" id="btnInkEraserMode" title="Goma d'esborrar per traços: toca un traç per eliminar-lo">🧹 Goma</button>
+      </div>
+      <span class="ink-sep" aria-hidden="true"></span>
+      <div class="ink-toolbar-section ink-colors-group" role="group" aria-label="Colors d'anotació">
+        <button type="button" class="ink-color-dot active" data-color="#ef4444" style="background:#ef4444;" title="Vermell"></button>
+        <button type="button" class="ink-color-dot" data-color="#2563eb" style="background:#2563eb;" title="Blau"></button>
+        <button type="button" class="ink-color-dot" data-color="#059669" style="background:#059669;" title="Verd"></button>
+        <button type="button" class="ink-color-dot" data-color="#d97706" style="background:#d97706;" title="Àmbar"></button>
+        <button type="button" class="ink-color-dot" data-color="#7c3aed" style="background:#7c3aed;" title="Violeta"></button>
+        <button type="button" class="ink-color-dot" data-color="#db2777" style="background:#db2777;" title="Rosa"></button>
+        <button type="button" class="ink-color-dot" data-color="#0891b2" style="background:#0891b2;" title="Cian"></button>
+        <button type="button" class="ink-color-dot" data-color="#eab308" style="background:#eab308;" title="Groc marcador"></button>
+        <button type="button" class="ink-color-dot" data-color="#1e293b" style="background:#1e293b;" title="Grafit / Negre"></button>
+        <label class="ink-custom-color-btn" id="inkCustomColorLabel" title="Triar qualsevol color personalitzat">
+          <input type="color" id="inkCustomColorInput" value="#ef4444" aria-label="Color personalitzat d'anotació" />
+          <span>🎨</span>
+        </label>
+      </div>
+      <span class="ink-sep" aria-hidden="true"></span>
+      <div class="ink-toolbar-section ink-widths-group" role="group" aria-label="Gruix del traç">
+        <button type="button" class="ink-width-btn" data-ink-width="1.8" title="Traç fi"><span class="ink-width-dot" style="width:4px;height:4px;"></span></button>
+        <button type="button" class="ink-width-btn active" data-ink-width="2.8" title="Traç mitjà"><span class="ink-width-dot" style="width:7px;height:7px;"></span></button>
+        <button type="button" class="ink-width-btn" data-ink-width="5.2" title="Traç gruixut"><span class="ink-width-dot" style="width:11px;height:11px;"></span></button>
+      </div>
+      <span class="ink-sep" aria-hidden="true"></span>
+      <div class="ink-toolbar-section ink-actions-group">
+        <button type="button" class="tb-btn" id="btnInkUndo" title="Desfer últim traç">↶ Desfer</button>
+        <button type="button" class="tb-btn" id="btnInkRedo" title="Refer traç desfet" disabled>↷ Refer</button>
+        <button type="button" class="tb-btn" id="btnInkClear" title="Esborrar tots els traços de la pàgina">🗑️ Netejar tot</button>
+        <button type="button" class="tb-btn active" id="btnInkDone">Fet</button>
+      </div>
     </div>
 
     <!-- Espai Central en 3 Columnes: Llibretes | Pissarra d'Apartats | Scoreboard -->
@@ -282,6 +308,48 @@
         <div class="sc-item"><span>Límit / Integral / Arrel</span> <kbd>lim</kbd> <kbd>int</kbd> <kbd>sqrt</kbd></div>
         <div class="sc-item"><span>Funció a trossos ràpida</span> <kbd>trossos</kbd></div>
         <div class="sc-item"><span>Afegir fila a sistema/trossos</span> <kbd>Shift + Enter</kbd></div>
+        <div class="sc-item"><span>Negreta (text i equacions)</span> <kbd>⌘/Ctrl + B</kbd></div>
+        <div class="sc-item"><span>Subratllat (text i equacions)</span> <kbd>⌘/Ctrl + U</kbd></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3b: Historial de Versions d'Aritmètic -->
+  <div class="modal-backdrop" id="versionHistoryModal">
+    <div class="modal-card version-modal-card">
+      <div class="modal-header">
+        <h2>📜 Historial de Versions d'Aritmètic</h2>
+        <button class="row-icon-btn" id="btnCloseVersionHistory" aria-label="Tancar">✕</button>
+      </div>
+      <div class="version-timeline">
+        <article class="version-entry is-current">
+          <div class="version-entry-head">
+            <span class="version-tag current">v1.1</span>
+            <strong>Revamp Major: Àlgebra Lineal, Anàlisi Avançada, UI i Precisió</strong>
+            <span class="version-date">Novembre 2026</span>
+          </div>
+          <ul class="version-list">
+            <li><strong>Motor matemàtic v1.1:</strong> Operacions completes amb <strong>vectors</strong> (<code>+</code>, <code>-</code>, escalar, <code>\cdot</code>, <code>\times</code>, norma <code>\|\vec{v}\|</code>, <code>angle</code>, <code>proj</code>) i <strong>matrius</strong> (producte <code>AB</code>, <code>A^{-1}</code>, <code>A^T</code>, <code>\det</code>, <code>tr</code>, <code>rang</code>, <code>vmatrix</code> <i>N</i>×<i>N</i>); targetes enriquides al panell de Variables.</li>
+            <li><strong>Càlcul diferencial i especials:</strong> Derivades parcials d'ordre 1 i 2 (<code>\partial</code>, <code>\frac{\partial^2 f}{\partial x \partial y}</code>), operador <strong>nabla</strong> (<code>\nabla</code>), barra vertical d'<strong>avaluar en</strong> (<code>\left. f \right|_{x=a}</code>), regla de Barrow, i funció <strong>Gamma</strong> (<code>\Gamma(z)</code>) amb factorial real.</li>
+            <li><strong>Resolucions i detecció millorades:</strong> Reconeixement universal de funcions (amb subíndexs, majúscules, gregues o <code>\vec{r}(t)</code>), símbols de definició (<code>:=</code>, <code>\equiv</code>, <code>\triangleq</code>), sumatoris/productoris amb límits sense claudàtors o <code>\limits</code> i exponents/subíndexs invertits (<code>\lambda^i_2</code>), resolució analítica d'equacions no lineals encadenades (com Weibull), diagnòstic clar quan no existeix solució real (<code>∉ ℝ</code>) i sistemes no lineals 2×2/3×3.</li>
+            <li><strong>Teclat ampliat amb scroll vertical:</strong> Totes les lletres gregues minúscules, variants i majúscules (<code>\Gamma</code>..<code>\Omega</code>), símbols de definició, parcials, vectors/matrius, <code>{ }</code> i negreta/subratllat.</li>
+            <li><strong>Escriptura i format:</strong> Corregida la tecla <code>}</code> i <code>{</code> en teclats Mac català/espanyol, eliminat l'espai artificial després de la coma decimal (<code>0,9</code>), salt de línia automàtic del text amb cometes <code>"</code>, i <strong>Negreta</strong> (<code>⌘/Ctrl+B</code>) + <strong>Subratllat</strong> (<code>⌘/Ctrl+U</code>) tant en blocs de text (exportats també al PDF) com en equacions.</li>
+            <li><strong>Pissarra més neta i anotació millorada:</strong> Eliminat l'espai buit en apartats sense títol (amb botó flotant per posar-ne), i barra d'anotar redissenyada amb <strong>9 colors + selector personalitzat</strong>, 3 gruixos, <strong>Goma per traços</strong> i botó <strong>Refer</strong>.</li>
+          </ul>
+        </article>
+
+        <article class="version-entry">
+          <div class="version-entry-head">
+            <span class="version-tag">v1.0</span>
+            <strong>Versió Inicial d'Aritmètic</strong>
+            <span class="version-date">2026</span>
+          </div>
+          <ul class="version-list">
+            <li>Pissarra interactiva d'apartats amb MathLive local, blocs de text pla i imatges redimensionables.</li>
+            <li>Motor simbòlic-numèric tolerant amb resolució automàtica de variables, equacions de 1r/2n grau, sistemes lineals, límits, integrals, funcions a trossos i gràfica 2D.</li>
+            <li>6 temes visuals + tema personalitzat, exportació neta a PDF A4, làser, llapis d'anotació, temporitzador i sincronització privada amb Google Drive.</li>
+          </ul>
+        </article>
       </div>
     </div>
   </div>

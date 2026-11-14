@@ -247,10 +247,13 @@ body[data-theme="custom"] .primary-action-btn {
   font-weight: 700;
 }
 
-/* Assegura que tot el text en línia de MathLive (" -> \text{...}) adopti la tipografia i la mida escollides sense multiplicar sub-spans */
+/* Assegura que tot el text en línia de MathLive (" -> \text{...}) adopti la tipografia, mida i salt de línia automàtic */
 .ML__text {
   font-family: var(--font-plain-text) !important;
   font-size: var(--inline-text-scale, 1em) !important;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
 }
 
 .ML__text .ML__text {
@@ -340,6 +343,27 @@ html, body {
   font-weight: 700;
   font-size: 15px;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.22);
+}
+
+.version-badge {
+  border: 1px solid var(--border-subtle);
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  flex-shrink: 0;
+  transition: all 0.14s ease;
+}
+.version-badge:hover {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: var(--active-btn-fg, #ffffff);
+  transform: translateY(-1px);
 }
 
 .breadcrumb-bar {
@@ -733,37 +757,130 @@ body.dark-theme .tb-btn[data-tooltip]::after {
   color: var(--accent-red);
 }
 
-/* Barra flotant del mode Llapis */
+/* Barra flotant del mode Llapis (v1.1 Revamp) */
 .ink-toolbar {
   display: none;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 14px;
   background: var(--bg-panel);
   border: 1px solid var(--accent-blue);
   border-radius: 999px;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.15);
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.16);
   position: absolute;
-  top: 60px;
+  top: 58px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 45;
   font-size: 12.5px;
+  max-width: calc(100vw - 24px);
 }
 .ink-toolbar.visible {
   display: flex;
 }
+.ink-toolbar-section {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ink-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+}
 .ink-color-dot {
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
   border-radius: 50%;
-  border: 2px solid transparent;
+  border: 2px solid rgba(15, 23, 42, 0.14);
   cursor: pointer;
   padding: 0;
+  transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+.ink-color-dot:hover {
+  transform: scale(1.12);
 }
 .ink-color-dot.active {
   transform: scale(1.18);
   border-color: var(--text-primary);
+  box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 3.5px var(--accent-blue);
+}
+.ink-custom-color-btn {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--border-strong);
+  background: var(--bg-app);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: transform 0.12s, border-color 0.12s;
+}
+.ink-custom-color-btn:hover {
+  transform: scale(1.1);
+  border-color: var(--accent-blue);
+}
+.ink-custom-color-btn.active {
+  border-style: solid;
+  border-width: 2.5px;
+  box-shadow: 0 0 0 2px var(--bg-panel), 0 0 0 3.5px var(--accent-blue);
+}
+.ink-custom-color-btn input[type="color"] {
+  position: absolute;
+  inset: -4px;
+  width: 32px;
+  height: 32px;
+  opacity: 0;
+  cursor: pointer;
+}
+.ink-width-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-app);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.12s;
+}
+.ink-width-btn:hover {
+  border-color: var(--accent-blue);
+}
+.ink-width-btn.active {
+  background: var(--accent-blue-soft);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+.ink-width-dot {
+  border-radius: 50%;
+  background: currentColor;
+  display: block;
+}
+#btnInkEraserMode.active {
+  background: var(--accent-amber-bg);
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+}
+.ink-toolbar .tb-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.annotation-canvas.eraser-mode {
+  cursor: cell !important;
 }
 
 /* ==========================================================================
@@ -1251,12 +1368,46 @@ body[data-hide-apartat-nums="true"] .apartat-gutter {
   color: var(--text-muted);
 }
 
-/* Quan l'apartat no té subtítol i no té el ratolí a sobre, fem la capçalera ultra-compacta */
+/* Quan l'apartat no té subtítol: col·lapsa totalment la capçalera i mostra només la barra flotant en passar-hi o enfocar */
+.apartat-block.is-untitled:not(.showing-title-input) .apartat-header {
+  min-height: 0;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+}
+.apartat-block.is-untitled:not(.showing-title-input) .apartat-label-input {
+  display: none;
+}
+.apartat-block.is-untitled:not(.showing-title-input) .apartat-toolbar {
+  position: absolute;
+  top: 5px;
+  right: 10px;
+  z-index: 6;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  padding: 2px 5px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.09);
+  pointer-events: none;
+}
+.apartat-block.is-untitled:not(.showing-title-input):hover .apartat-toolbar,
+.apartat-block.is-untitled:not(.showing-title-input).focused .apartat-toolbar {
+  pointer-events: auto;
+}
+.apartat-block.is-untitled:not(.showing-title-input) .apartat-gutter {
+  padding-top: 11px;
+}
+.apartat-block.is-untitled:not(.showing-title-input) .apartat-main {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
 .apartat-header.empty-label:not(:hover) {
-  min-height: 4px;
+  min-height: 0;
 }
 .apartat-block:not(:hover):not(.focused) .apartat-header.empty-label .apartat-label-input {
-  height: 4px;
+  height: 0;
   padding: 0;
 }
 
@@ -1389,6 +1540,89 @@ math-field.equation-field::part(content) {
 }
 .apartat-textarea::placeholder {
   color: var(--text-muted);
+}
+
+.apartat-text-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.apartat-text-toolbar {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+.apartat-text-item:hover .apartat-text-toolbar,
+.apartat-text-item.active-subitem .apartat-text-toolbar,
+.apartat-text-item:focus-within .apartat-text-toolbar {
+  display: flex;
+}
+.text-fmt-btn {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  font-size: 11px;
+  min-width: 24px;
+  height: 21px;
+  padding: 0 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+}
+.text-fmt-btn:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+.text-fmt-btn.active {
+  background: var(--accent-blue-soft);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.apartat-text-input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 1.55em;
+  color: var(--text-primary);
+  font-family: var(--font-plain-text);
+  font-size: var(--text-font-size);
+  line-height: var(--text-line-height);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  outline: none;
+  cursor: text;
+}
+.apartat-text-input:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.apartat-text-input b,
+.apartat-text-input strong,
+.print-text-block b,
+.print-text-block strong {
+  font-weight: 700;
+}
+.apartat-text-input u,
+.print-text-block u {
+  text-decoration: underline;
+  text-underline-offset: 2.5px;
+  text-decoration-thickness: 1.5px;
+}
+.apartat-text-input i,
+.apartat-text-input em,
+.print-text-block i,
+.print-text-block em {
+  font-style: italic;
 }
 
 /* Sub-ítem 3: Bloc d'IMATGE redimensionable dins un apartat (captures d'exercicis, esquemes, gràfics) */
@@ -1796,7 +2030,8 @@ math-field.equation-field::part(content) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
 }
 .var-symbol {
   font-size: 16.5px;
@@ -1806,6 +2041,8 @@ math-field.equation-field::part(content) {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+  max-width: 100%;
+  overflow-x: auto;
 }
 .var-value-exact {
   font-size: 16px;
@@ -1818,6 +2055,37 @@ math-field.equation-field::part(content) {
 .var-value-approx {
   font-size: 11.5px;
   color: var(--text-secondary);
+}
+
+.var-object-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+.var-obj-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+.var-matrix-inv {
+  margin-top: 2px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: var(--bg-panel);
+  border: 1px dashed var(--border-subtle);
+  font-size: 12px;
+  overflow-x: auto;
+  color: var(--text-secondary);
+}
+.var-reason-note {
+  font-size: 11px;
+  color: var(--accent-red);
+  line-height: 1.35;
 }
 
 .var-card-meta {
@@ -2064,6 +2332,18 @@ math-field.equation-field::part(content) {
   max-width: 1280px;
   width: 100%;
   margin: 0 auto;
+  max-height: min(252px, 34vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.keypad-content::-webkit-scrollbar {
+  width: 6px;
+}
+.keypad-content::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
 }
 
 .kp-desmos-layout {
@@ -2874,6 +3154,22 @@ kbd {
     gap: 4px;
   }
 
+  .apartat-block.is-untitled:not(.showing-title-input) .apartat-toolbar {
+    position: static;
+    display: none;
+    margin-bottom: 4px;
+    box-shadow: none;
+  }
+  .apartat-block.is-untitled:not(.showing-title-input).focused .apartat-header {
+    height: auto;
+    padding: 4px 8px 0;
+  }
+  .apartat-block.is-untitled:not(.showing-title-input).focused .apartat-toolbar {
+    display: flex;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   .apartat-toolbar {
     width: 100%;
     justify-content: flex-start;
@@ -3256,6 +3552,74 @@ body[data-hide-apartat-nums="true"] .print-apartat-gutter {
   white-space: nowrap;
   vertical-align: middle;
   transform-origin: left center;
+}
+
+/* Modal d'Historial de Versions */
+.version-modal-card {
+  max-width: 680px;
+}
+.version-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 8px;
+}
+.version-entry {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-app);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.version-entry.is-current {
+  border-color: var(--accent-blue);
+  background: var(--bg-board);
+  box-shadow: inset 3px 0 0 var(--accent-blue);
+}
+.version-entry-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13.5px;
+}
+.version-tag {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+.version-tag.current {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: var(--active-btn-fg, #ffffff);
+}
+.version-date {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.version-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.version-list code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  background: var(--bg-panel);
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
 }
 
 @page {

@@ -120,8 +120,9 @@
 
     funcQuickInputs: Object.create(null),
 
-    // Eines en viu: Llapis i Punter Làser
+    // Eines en viu: Llapis, Goma i Punter Làser
     inkActive: false,
+    inkSubTool: 'pen', // 'pen' | 'eraser'
     inkColor: '#ef4444',
     laserActive: false,
     laserTrail: [], // [{ x, y, t }]
@@ -149,6 +150,8 @@
   let lastAnalysis = { variables: [], functions: [], lineQuickResults: {} };
   let laserAnimFrame = null;
   let overlayCanvasScale = 1;
+  const inkUndoByPage = new Map(); // pageId -> action[]
+  const inkRedoByPage = new Map(); // pageId -> action[]
 
   function isMobileViewport() {
     return window.innerWidth <= 960;
@@ -638,7 +641,7 @@
     };
   }
 
-  const TOUR_VERSION = 6;
+  const TOUR_VERSION = 7;
 
   function migrateLegacyStarterTitles(notebooks) {
     let changed = false;
@@ -851,8 +854,106 @@
       .replace(/'/g, '&#39;');
   }
 
+  function markdownTextToSafeHtml(rawText) {
+    const esc = escapeHtml(rawText || '');
+    return esc
+      .replace(/\*\*([^\s*](?:[^*\n]*?[^\s*])?)\*\*/g, '<strong>$1</strong>')
+      .replace(/__([^\s_](?:[^_\n]*?[^\s_])?)__/g, '<u>$1</u>')
+      .replace(/(^|[^*])\*([^\s*](?:[^*\n]*?[^\s*])?)\*(?!\*)/g, '$1<em>$2</em>')
+      .replace(/\n/g, '<br>');
+  }
+
+  function wrapStyledSegment(inner, prefix, suffix) {
+    if (!inner) return '';
+    const leadMatch = inner.match(/^(\s*)/);
+    const trailMatch = inner.match(/(\s*)$/);
+    const lead = leadMatch ? leadMatch[1] : '';
+    const trail = trailMatch ? trailMatch[1] : '';
+    const coreStart = lead.length;
+    const coreEnd = inner.length - trail.length;
+    if (coreStart >= coreEnd) return inner;
+    const core = inner.slice(coreStart, coreEnd);
+    return `${lead}${prefix}${core}${suffix}${trail}`;
+  }
+
+  function serializeRichTextNode(node, activeStyles = { bold: false, underline: false, italic: false }) {
+    if (!node) return '';
+    if (node.nodeType === Node.TEXT_NODE) {
+      return (node.nodeValue || '').replace(/\u200B/g, '');
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const tag = node.tagName.toUpperCase();
+    if (tag === 'BR') return '\n';
+
+    const style = node.style || {};
+    const fw = style.fontWeight || '';
+    const td = (style.textDecorationLine || style.textDecoration || '').toLowerCase();
+    const fs = (style.fontStyle || '').toLowerCase();
+
+    const isBold = tag === 'B' || tag === 'STRONG' || fw === 'bold' || Number(fw) >= 600;
+    const isUnderline = tag === 'U' || td.includes('underline');
+    const isItalic = tag === 'I' || tag === 'EM' || fs === 'italic';
+
+    const nextStyles = {
+      bold: activeStyles.bold || isBold,
+      underline: activeStyles.underline || isUnderline,
+      italic: activeStyles.italic || isItalic
+    };
+
+    let out = '';
+    const isBlockTag = tag === 'DIV' || tag === 'P' || tag === 'LI';
+    const childList = Array.from(node.childNodes);
+    for (let i = 0; i < childList.length; i++) {
+      const ch = childList[i];
+      const chTag = ch.nodeType === Node.ELEMENT_NODE ? ch.tagName.toUpperCase() : '';
+      const chIsBlock = chTag === 'DIV' || chTag === 'P' || chTag === 'LI';
+      if (chIsBlock && out.length > 0 && !out.endsWith('\n')) {
+        out += '\n';
+      }
+      const part = serializeRichTextNode(ch, nextStyles);
+      out += part;
+    }
+
+    // Evita anidar doble format idèntic i desa els espais fora de les marques
+    let formatted = out;
+    if (isItalic && !activeStyles.italic) {
+      formatted = wrapStyledSegment(formatted, '*', '*');
+    }
+    if (isUnderline && !activeStyles.underline) {
+      formatted = wrapStyledSegment(formatted, '__', '__');
+    }
+    if (isBold && !activeStyles.bold) {
+      formatted = wrapStyledSegment(formatted, '**', '**');
+    }
+    if (isBlockTag && formatted === '' && node.querySelector && node.querySelector('br')) {
+      return '\n';
+    }
+    return formatted;
+  }
+
+  function serializeRichTextEditor(el) {
+    if (!el) return '';
+    return serializeRichTextNode(el).replace(/\u00a0/g, ' ').replace(/\n$/, '');
+  }
+
+  function isRichCaretAtBoundary(el, atEnd) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return true;
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed || !el.contains(range.startContainer)) return false;
+    const probe = document.createRange();
+    if (atEnd) {
+      probe.setStart(range.endContainer, range.endOffset);
+      probe.setEnd(el, el.childNodes.length);
+    } else {
+      probe.setStart(el, 0);
+      probe.setEnd(range.startContainer, range.startOffset);
+    }
+    return probe.toString().length === 0 && !probe.cloneContents().querySelector('br');
+  }
+
   function autoResizeTextarea(ta) {
-    if (!ta) return;
+    if (!ta || ta.tagName !== 'TEXTAREA') return;
     ta.style.height = 'auto';
     ta.style.height = `${Math.max(26, ta.scrollHeight)}px`;
   }
@@ -1166,12 +1267,26 @@
   // ============================================================================
   // 4. Renderitzat de la Pissarra: Seccions (§) i Apartats Multilínia
   // ============================================================================
-  // Full d'estil compartit per propagar la mida i font del text amb cometes (" -> \text{...}) dins el Shadow DOM de MathLive
+  // Full d'estil compartit per propagar la mida, font i salt de línia del text amb cometes (" -> \text{...}) dins el Shadow DOM de MathLive
   let sharedMathfieldSheet = null;
   const MATHFIELD_INLINE_TEXT_CSS = `
+    :host {
+      max-width: 100%;
+    }
+    .ML__container,
+    .ML__content,
+    .ML__base,
+    .ML__latex {
+      max-width: 100%;
+      white-space: normal !important;
+    }
     .ML__text {
       font-family: var(--text-font-family, system-ui, sans-serif) !important;
       font-size: var(--inline-text-scale, 1em) !important;
+      white-space: pre-wrap !important;
+      overflow-wrap: anywhere !important;
+      word-break: break-word !important;
+      display: inline !important;
     }
     .ML__text .ML__text {
       font-size: 1em !important;
@@ -1201,6 +1316,35 @@
     } catch (_e) { /* seguretat */ }
   }
 
+  function applyMathFieldFormatting(mf, kind) {
+    if (!mf) return;
+    mf.focus();
+    const selLatex = (typeof mf.getValue === 'function' ? mf.getValue(mf.selection, 'latex') : '') || '';
+    if (kind === 'bold') {
+      const m = selLatex.match(/^\s*(?:\\mathbf|\\boldsymbol|\\textbf)\{([\s\S]*)\}\s*$/);
+      if (m) {
+        mf.insert(m[1], { focus: true });
+      } else if (selLatex) {
+        const cmd = mf.mode === 'text' ? '\\textbf' : '\\mathbf';
+        mf.insert(`${cmd}{${selLatex}}`, { focus: true });
+      } else {
+        const cmd = mf.mode === 'text' ? '\\textbf{#0}' : '\\mathbf{#0}';
+        mf.insert(cmd, { focus: true, selectionMode: 'placeholder' });
+      }
+      return;
+    }
+    if (kind === 'underline') {
+      const m = selLatex.match(/^\s*\\underline\{([\s\S]*)\}\s*$/);
+      if (m) {
+        mf.insert(m[1], { focus: true });
+      } else if (selLatex) {
+        mf.insert(`\\underline{${selLatex}}`, { focus: true });
+      } else {
+        mf.insert('\\underline{#0}', { focus: true, selectionMode: 'placeholder' });
+      }
+    }
+  }
+
   function configureMathfield(mf, block, item) {
     mf.className = 'equation-field';
     mf.mathVirtualKeyboardPolicy = 'manual';
@@ -1225,7 +1369,11 @@
           mf.keybindings = [
             { key: '[Tab]', ifMode: 'math', command: ['insert', '\\qquad'] },
             { key: 'shift+[Tab]', ifMode: 'math', command: ['insert', '\\quad'] },
-            ...mf.keybindings.filter(kb => kb.key !== '[Tab]' && kb.key !== 'shift+[Tab]')
+            ...mf.keybindings.filter(kb =>
+              kb.key !== '[Tab]' &&
+              kb.key !== 'shift+[Tab]' &&
+              !/^alt\+(?:shift\+)?\[(?:Backslash|BracketLeft|BracketRight|Quote)\]$/.test(kb.key || '')
+            )
           ];
         }
       } catch (_e) { /* seguretat */ }
@@ -1258,6 +1406,36 @@
     });
 
     mf.addEventListener('keydown', (ev) => {
+      // Correcció teclats Mac (català/espanyol ISO): Option+ç -> '}' i Option+´ -> '{'
+      if ((ev.key === '{' || ev.key === '}') && !ev.metaKey && !ev.ctrlKey) {
+        if (ev.altKey || ev.code === 'Backslash' || ev.code === 'Quote') {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (mf.mode === 'text' || mf.mode === 'latex') {
+            mf.insert(ev.key, { focus: true });
+          } else if (ev.key === '{') {
+            mf.insert('\\left\\{#0\\right\\}', { focus: true, selectionMode: 'placeholder' });
+          } else {
+            mf.insert('\\}', { focus: true });
+          }
+          return;
+        }
+      }
+
+      // Negreta (Cmd/Ctrl+B) i Subratllat (Cmd/Ctrl+U) dins d'equacions
+      if ((ev.metaKey || ev.ctrlKey) && !ev.altKey && ev.key.toLowerCase() === 'b') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        applyMathFieldFormatting(mf, 'bold');
+        return;
+      }
+      if ((ev.metaKey || ev.ctrlKey) && !ev.altKey && ev.key.toLowerCase() === 'u') {
+        ev.preventDefault();
+        ev.stopPropagation();
+        applyMathFieldFormatting(mf, 'underline');
+        return;
+      }
+
       // Tecla Tab: insereix una tabulació matemàtica (\qquad) per separar variables en una mateixa línia!
       if (ev.key === 'Tab') {
         ev.preventDefault();
@@ -1322,34 +1500,119 @@
     }, true);
   }
 
-  function configureTextarea(ta, block, item) {
-    ta.className = 'apartat-textarea';
-    ta.rows = 1;
-    ta.placeholder = 'Escriu l\'enunciat, explicació o conclusió aquí (fa salt de línia automàtic sense sortir pel costat; Shift+Enter per passar a equació)...';
-    ta.value = item.text || '';
+  function applyTextFormatCmd(ed, cmd, btn) {
+    ed.focus();
+    try {
+      document.execCommand(cmd, false, null);
+    } catch (_) { /* noop */ }
+    if (btn) {
+      try {
+        btn.classList.toggle('active', document.queryCommandState(cmd));
+      } catch (_) { /* noop */ }
+    }
+  }
 
-    ta.addEventListener('focus', () => {
-      setActiveBlockAndItem(block.id, item.id, false);
-    });
+  function configureRichTextEditor(ed, btnBold, btnUnd, btnIt, block, item) {
+    ed.className = 'apartat-text-input';
+    ed.contentEditable = 'true';
+    ed.setAttribute('role', 'textbox');
+    ed.setAttribute('aria-multiline', 'true');
+    ed.setAttribute('spellcheck', 'true');
+    ed.dataset.placeholder = 'Escriu l\'enunciat, explicació o conclusió aquí (Ctrl/⌘+B negreta, Ctrl/⌘+U subratllat, Shift+Enter equació)...';
+    ed.innerHTML = markdownTextToSafeHtml(item.text || '');
 
-    ta.addEventListener('input', () => {
-      item.text = ta.value;
-      autoResizeTextarea(ta);
+    const syncFmtBtns = () => {
+      try {
+        if (btnBold) btnBold.classList.toggle('active', document.queryCommandState('bold'));
+        if (btnUnd) btnUnd.classList.toggle('active', document.queryCommandState('underline'));
+        if (btnIt) btnIt.classList.toggle('active', document.queryCommandState('italic'));
+      } catch (_) { /* noop */ }
+    };
+
+    const syncModel = () => {
+      const nextText = serializeRichTextEditor(ed);
+      if (nextText === '' && ed.innerHTML !== '') {
+        ed.innerHTML = '';
+      }
+      item.text = nextText;
       saveState();
+      syncFmtBtns();
       requestAnimationFrame(resizeOverlayCanvases);
+    };
+
+    const bindFmtBtn = (btn, cmd) => {
+      if (!btn) return;
+      btn.addEventListener('mousedown', (ev) => {
+        ev.preventDefault();
+        applyTextFormatCmd(ed, cmd, btn);
+        syncModel();
+      });
+    };
+    bindFmtBtn(btnBold, 'bold');
+    bindFmtBtn(btnUnd, 'underline');
+    bindFmtBtn(btnIt, 'italic');
+
+    ed.addEventListener('focus', () => {
+      setActiveBlockAndItem(block.id, item.id, false);
+      syncFmtBtns();
     });
 
-    ta.addEventListener('keydown', (ev) => {
+    ed.addEventListener('keyup', syncFmtBtns);
+    ed.addEventListener('mouseup', syncFmtBtns);
+    ed.addEventListener('input', syncModel);
+
+    // Enganxat net de text pla (deixa passar imatges del porta-retalls al gestor global)
+    ed.addEventListener('paste', (ev) => {
+      const cb = ev.clipboardData || window.clipboardData;
+      if (!cb) return;
+      if (cb.files && cb.files.length > 0 && Array.from(cb.files).some(f => f.type.startsWith('image/'))) {
+        return;
+      }
+      if (cb.items && Array.from(cb.items).some(it => it.type && it.type.startsWith('image/'))) {
+        return;
+      }
+      ev.preventDefault();
+      const plain = cb.getData('text/plain') || '';
+      if (!plain) return;
+      try {
+        document.execCommand('insertText', false, plain);
+      } catch (_) {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+          const node = document.createTextNode(plain);
+          range.insertNode(node);
+          range.setStartAfter(node);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      }
+      syncModel();
+    });
+
+    ed.addEventListener('keydown', (ev) => {
+      const mod = ev.metaKey || ev.ctrlKey;
+      const lower = (ev.key || '').toLowerCase();
+
+      // Dreceres Cmd/Ctrl+B (negreta), Cmd/Ctrl+U (subratllat), Cmd/Ctrl+I (cursiva)
+      if (mod && !ev.altKey && (lower === 'b' || lower === 'u' || lower === 'i')) {
+        ev.preventDefault();
+        const cmd = lower === 'b' ? 'bold' : (lower === 'u' ? 'underline' : 'italic');
+        const btn = lower === 'b' ? btnBold : (lower === 'u' ? btnUnd : btnIt);
+        applyTextFormatCmd(ed, cmd, btn);
+        syncModel();
+        return;
+      }
+
       // Tecla Tab dins d'un bloc de text insereix 4 espais de tabulació sense perdre el focus
       if (ev.key === 'Tab') {
         ev.preventDefault();
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        ta.value = ta.value.slice(0, start) + '    ' + ta.value.slice(end);
-        ta.selectionStart = ta.selectionEnd = start + 4;
-        item.text = ta.value;
-        autoResizeTextarea(ta);
-        saveState();
+        try {
+          document.execCommand('insertText', false, '    ');
+        } catch (_) { /* noop */ }
+        syncModel();
         return;
       }
 
@@ -1361,26 +1624,26 @@
       }
 
       // Cmd/Ctrl + Enter crea un nou apartat a sota
-      if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) {
+      if (ev.key === 'Enter' && mod) {
         ev.preventDefault();
         insertNewApartatAfter(block.id, 'math');
         return;
       }
 
       // Fletxa amunt a l'inici o avall al final per navegar entre sub-ítems
-      if (ev.key === 'ArrowUp' && ta.selectionStart === 0 && ta.selectionEnd === 0) {
+      if (ev.key === 'ArrowUp' && isRichCaretAtBoundary(ed, false)) {
         ev.preventDefault();
         focusNeighborItem(item.id, -1);
         return;
       }
-      if (ev.key === 'ArrowDown' && ta.selectionStart === ta.value.length && ta.selectionEnd === ta.value.length) {
+      if (ev.key === 'ArrowDown' && isRichCaretAtBoundary(ed, true)) {
         ev.preventDefault();
         focusNeighborItem(item.id, 1);
         return;
       }
 
       // Backspace si està buit elimina el bloc de text
-      if (ev.key === 'Backspace' && ta.value === '') {
+      if (ev.key === 'Backspace' && serializeRichTextEditor(ed) === '') {
         ev.preventDefault();
         deleteSubItem(block.id, item.id, true);
       }
@@ -1798,8 +2061,9 @@
 
       // Renderitza APARTAT
       apartatNumber++;
+      const hasTitle = Boolean(block.label && block.label.trim());
       const apEl = document.createElement('div');
-      apEl.className = `apartat-block ${block.id === state.activeBlockId ? 'focused' : ''}`;
+      apEl.className = `apartat-block ${block.id === state.activeBlockId ? 'focused' : ''} ${!hasTitle ? 'is-untitled' : ''}`;
       apEl.dataset.blockId = block.id;
       apEl.dataset.accent = block.accent || 'none';
 
@@ -1839,15 +2103,34 @@
       const header = document.createElement('div');
       header.className = `apartat-header ${!block.label ? 'empty-label' : ''}`;
 
+      const btnAddTitle = document.createElement('button');
+      btnAddTitle.className = 'ap-action-btn';
+      btnAddTitle.title = 'Afegir un títol opcional a aquest apartat';
+      btnAddTitle.textContent = '+ Títol';
+      btnAddTitle.style.display = hasTitle ? 'none' : '';
+
       const labelInp = document.createElement('input');
       labelInp.type = 'text';
       labelInp.className = 'apartat-label-input';
       labelInp.placeholder = 'Títol opcional de l\'apartat (ex: Apartat a) Domini)...';
       labelInp.value = block.label || '';
-      labelInp.addEventListener('focus', () => setActiveBlockAndItem(block.id, null, false));
+      labelInp.addEventListener('focus', () => {
+        setActiveBlockAndItem(block.id, null, false);
+        apEl.classList.add('showing-title-input');
+      });
+      labelInp.addEventListener('blur', () => {
+        apEl.classList.remove('showing-title-input');
+        const nextHasTitle = Boolean(block.label && block.label.trim());
+        apEl.classList.toggle('is-untitled', !nextHasTitle);
+        header.classList.toggle('empty-label', !block.label);
+        btnAddTitle.style.display = nextHasTitle ? 'none' : '';
+      });
       labelInp.addEventListener('input', () => {
         block.label = labelInp.value;
+        const nextHasTitle = Boolean(block.label && block.label.trim());
+        apEl.classList.toggle('is-untitled', !nextHasTitle);
         header.classList.toggle('empty-label', !block.label);
+        btnAddTitle.style.display = nextHasTitle ? 'none' : '';
         saveState();
       });
       labelInp.addEventListener('keydown', (ev) => {
@@ -1856,6 +2139,12 @@
           const firstIt = block.items[0];
           if (firstIt) focusItemById(firstIt.id, 'end');
         }
+      });
+
+      btnAddTitle.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        apEl.classList.add('showing-title-input');
+        labelInp.focus();
       });
 
       const tb = document.createElement('div');
@@ -1912,6 +2201,7 @@
       btnDelAp.textContent = '✕';
       btnDelAp.addEventListener('click', () => deleteBlock(block.id));
 
+      tb.appendChild(btnAddTitle);
       tb.appendChild(btnAddMath);
       tb.appendChild(btnAddText);
       tb.appendChild(btnAddImage);
@@ -1938,9 +2228,40 @@
           tWrap.className = `apartat-text-item ${item.id === state.activeItemId ? 'active-subitem' : ''}`;
           tWrap.dataset.itemId = item.id;
 
-          const ta = document.createElement('textarea');
-          configureTextarea(ta, block, item);
-          textareaMap.set(item.id, ta);
+          const textOuter = document.createElement('div');
+          textOuter.className = 'apartat-text-wrap';
+
+          const fmtBar = document.createElement('div');
+          fmtBar.className = 'apartat-text-toolbar';
+
+          const btnBold = document.createElement('button');
+          btnBold.type = 'button';
+          btnBold.className = 'text-fmt-btn';
+          btnBold.title = 'Negreta (Ctrl/⌘+B)';
+          btnBold.innerHTML = '<b>B</b>';
+
+          const btnUnd = document.createElement('button');
+          btnUnd.type = 'button';
+          btnUnd.className = 'text-fmt-btn';
+          btnUnd.title = 'Subratllat (Ctrl/⌘+U)';
+          btnUnd.innerHTML = '<u>U</u>';
+
+          const btnIt = document.createElement('button');
+          btnIt.type = 'button';
+          btnIt.className = 'text-fmt-btn';
+          btnIt.title = 'Cursiva (Ctrl/⌘+I)';
+          btnIt.innerHTML = '<i>I</i>';
+
+          fmtBar.appendChild(btnBold);
+          fmtBar.appendChild(btnUnd);
+          fmtBar.appendChild(btnIt);
+
+          const ed = document.createElement('div');
+          configureRichTextEditor(ed, btnBold, btnUnd, btnIt, block, item);
+          textareaMap.set(item.id, ed);
+
+          textOuter.appendChild(fmtBar);
+          textOuter.appendChild(ed);
 
           const subActs = document.createElement('div');
           subActs.className = 'subitem-actions';
@@ -1960,7 +2281,7 @@
           subActs.appendChild(toMathBtn);
           subActs.appendChild(delItBtn);
 
-          tWrap.appendChild(ta);
+          tWrap.appendChild(textOuter);
           tWrap.appendChild(subActs);
           itemsWrap.appendChild(tWrap);
         } else if (item.kind === 'image' && isSafeImageDataUrl(item.src)) {
@@ -2044,8 +2365,19 @@
     } else if (textareaMap.has(itemId)) {
       const ta = textareaMap.get(itemId);
       ta.focus();
-      const idx = pos === 'start' ? 0 : ta.value.length;
-      ta.setSelectionRange(idx, idx);
+      if (ta.tagName === 'TEXTAREA') {
+        const idx = pos === 'start' ? 0 : ta.value.length;
+        ta.setSelectionRange(idx, idx);
+      } else {
+        const sel = window.getSelection();
+        if (sel) {
+          const range = document.createRange();
+          range.selectNodeContents(ta);
+          range.collapse(pos !== 'start');
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      }
     } else if (imageCaptionMap.has(itemId)) {
       const cap = imageCaptionMap.get(itemId);
       cap.focus();
@@ -2360,10 +2692,20 @@
       const info = lineQuickResults[itemId];
       if (!info || !info.formatted) return;
 
+      const isLatexString = info.isLatex || typeof info.formatted === 'string';
+      const latexOut = isLatexString ? String(info.formatted) : info.formatted.latex;
+      const pillPreview = isLatexString
+        ? (typeof info.previewText === 'string' ? info.previewText : '')
+        : info.formatted.text.split('≈')[0].trim();
+
       const btn = document.createElement('button');
       btn.className = 'quick-calc-pill';
       btn.title = 'Clica si vols afegir el resultat calculat a aquesta equació';
-      btn.textContent = `= ${info.formatted.text.split('≈')[0].trim()}`;
+      if (isLatexString && !pillPreview) {
+        btn.innerHTML = `= ${renderLatexStatic(latexOut)}`;
+      } else {
+        btn.textContent = `= ${pillPreview}`;
+      }
       btn.addEventListener('click', (ev) => {
         ev.stopPropagation();
         const mf = mathfieldMap.get(itemId);
@@ -2371,7 +2713,7 @@
         const prefix = info.endsWithEquals ? ' ' : ' = ';
         mf.focus();
         mf.executeCommand('moveToMathfieldEnd');
-        mf.insert(`${prefix}${info.formatted.latex}`);
+        mf.insert(`${prefix}${latexOut}`);
       });
       slot.appendChild(btn);
     });
@@ -2473,10 +2815,12 @@
     if (v.status === 'computed' || v.status === 'solved' || v.status === 'override') {
       const exactEl = document.createElement('div');
       exactEl.className = 'var-value-exact';
-      exactEl.innerHTML = renderLatexStatic(v.formatted.latex);
+      const isStrFmt = typeof v.formatted === 'string';
+      const exactLatex = isStrFmt ? v.formatted : (v.formatted && v.formatted.latex ? v.formatted.latex : '');
+      exactEl.innerHTML = renderLatexStatic(exactLatex);
       valBox.appendChild(exactEl);
 
-      if (v.formatted.approxLatex) {
+      if (!isStrFmt && v.formatted && v.formatted.approxLatex) {
         const approxEl = document.createElement('div');
         approxEl.className = 'var-value-approx';
         approxEl.textContent = `≈ ${v.formatted.approxLatex}`;
@@ -2501,6 +2845,12 @@
         msg.textContent = 'Sense sol. real';
       }
       valBox.appendChild(msg);
+      if (v.reason) {
+        const reasonEl = document.createElement('div');
+        reasonEl.className = 'var-reason-note';
+        reasonEl.textContent = v.reason;
+        valBox.appendChild(reasonEl);
+      }
     } else if (v.status === 'incompatible') {
       const msg = document.createElement('div');
       msg.style.color = 'var(--accent-red)';
@@ -2528,6 +2878,57 @@
     main.appendChild(sym);
     main.appendChild(valBox);
     card.appendChild(main);
+
+    if (v.vectorMeta) {
+      const vecMeta = document.createElement('div');
+      vecMeta.className = 'var-object-meta';
+      const dimBadge = document.createElement('span');
+      dimBadge.className = 'var-obj-badge';
+      dimBadge.textContent = `Vector ℝ^${v.vectorMeta.dim}`;
+      vecMeta.appendChild(dimBadge);
+      if (v.vectorMeta.normFormatted) {
+        const normBadge = document.createElement('span');
+        normBadge.className = 'var-obj-badge';
+        normBadge.innerHTML = `‖·‖ = ${renderLatexStatic(v.vectorMeta.normFormatted.latex || '')}`;
+        vecMeta.appendChild(normBadge);
+      }
+      card.appendChild(vecMeta);
+    }
+
+    if (v.matrixMeta) {
+      const matMeta = document.createElement('div');
+      matMeta.className = 'var-object-meta';
+      const sizeBadge = document.createElement('span');
+      sizeBadge.className = 'var-obj-badge';
+      sizeBadge.textContent = `Matriu ${v.matrixMeta.rows}×${v.matrixMeta.cols}`;
+      matMeta.appendChild(sizeBadge);
+
+      const rankBadge = document.createElement('span');
+      rankBadge.className = 'var-obj-badge';
+      rankBadge.textContent = `rang = ${v.matrixMeta.rank}`;
+      matMeta.appendChild(rankBadge);
+
+      if (v.matrixMeta.detFormatted) {
+        const detBadge = document.createElement('span');
+        detBadge.className = 'var-obj-badge';
+        detBadge.innerHTML = `det = ${renderLatexStatic(v.matrixMeta.detFormatted.latex || '')}`;
+        matMeta.appendChild(detBadge);
+      }
+      if (v.matrixMeta.traceFormatted) {
+        const trBadge = document.createElement('span');
+        trBadge.className = 'var-obj-badge';
+        trBadge.innerHTML = `tr = ${renderLatexStatic(v.matrixMeta.traceFormatted.latex || '')}`;
+        matMeta.appendChild(trBadge);
+      }
+      card.appendChild(matMeta);
+
+      if (v.matrixMeta.inverseLatex) {
+        const invBox = document.createElement('div');
+        invBox.className = 'var-matrix-inv';
+        invBox.innerHTML = `<b>Inversa:</b> ${renderLatexStatic(v.matrixMeta.inverseLatex)}`;
+        card.appendChild(invBox);
+      }
+    }
 
     const meta = document.createElement('div');
     meta.className = 'var-card-meta';
@@ -3251,7 +3652,7 @@
 
         const itemsHtml = nonEmptyItems.map(it => {
           if (it.kind === 'text') {
-            return `<div class="print-text-block">${escapeHtml(it.text)}</div>`;
+            return `<div class="print-text-block">${markdownTextToSafeHtml(it.text)}</div>`;
           }
           if (it.kind === 'image') {
             const wPct = Math.max(15, Math.min(100, Number(it.widthPct) || 58));
@@ -3486,6 +3887,14 @@
     }
 
     if (item.cmd) {
+      if (item.cmd === 'mathBold') {
+        applyMathFieldFormatting(mf, 'bold');
+        return;
+      }
+      if (item.cmd === 'mathUnderline') {
+        applyMathFieldFormatting(mf, 'underline');
+        return;
+      }
       mf.executeCommand(item.cmd);
       return;
     }
@@ -3550,15 +3959,113 @@
   }
 
   // ============================================================================
-  // 9. Llapis Lliure (persistent a cada pàgina!) + Punter Làser Efímer + Timer
+  // 9. Llapis Lliure (persistent a cada pàgina!) + Goma + Desfer/Refer + Làser
   // ============================================================================
+  function distPointToSegmentSq(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) {
+      const ex = px - x1;
+      const ey = py - y1;
+      return ex * ex + ey * ey;
+    }
+    let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+    if (t < 0) t = 0;
+    else if (t > 1) t = 1;
+    const projX = x1 + t * dx;
+    const projY = y1 + t * dy;
+    const ox = px - projX;
+    const oy = py - projY;
+    return ox * ox + oy * oy;
+  }
+
+  function isInkStrokeHit(stroke, pt) {
+    if (!stroke || !Array.isArray(stroke.points) || stroke.points.length === 0) return false;
+    const r = Math.max(12, (Number(stroke.width) || 2.8) * 1.8 + 8);
+    const rSq = r * r;
+    const pts = stroke.points;
+    if (pts.length === 1) {
+      const dx = pt.x - pts[0].x;
+      const dy = pt.y - pts[0].y;
+      return dx * dx + dy * dy <= rSq;
+    }
+    for (let i = 1; i < pts.length; i++) {
+      if (distPointToSegmentSq(pt.x, pt.y, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y) <= rSq) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function pushInkUndoAction(pageId, action) {
+    if (!pageId || !action) return;
+    const stack = inkUndoByPage.get(pageId) || [];
+    stack.push(action);
+    if (stack.length > 80) stack.shift();
+    inkUndoByPage.set(pageId, stack);
+    inkRedoByPage.set(pageId, []);
+    updateInkToolbarUI();
+  }
+
+  function updateInkToolbarUI() {
+    const isEraser = state.inkSubTool === 'eraser';
+    const inkCanvas = document.getElementById('annotationCanvas');
+    inkCanvas?.classList.toggle('eraser-mode', Boolean(state.inkActive && isEraser));
+
+    document.getElementById('btnInkPenMode')?.classList.toggle('active', !isEraser);
+    document.getElementById('btnInkEraserMode')?.classList.toggle('active', isEraser);
+
+    const activeColor = sanitizeColor(state.inkColor, '#ef4444').toLowerCase();
+    let matchedPreset = false;
+    document.querySelectorAll('.ink-color-dot').forEach(dot => {
+      const dotCol = (dot.dataset.color || '').toLowerCase();
+      const match = dotCol === activeColor;
+      if (match) matchedPreset = true;
+      dot.classList.toggle('active', match);
+    });
+
+    const customInput = document.getElementById('inkCustomColorInput');
+    const customLabel = document.getElementById('inkCustomColorLabel');
+    if (customInput && /^#[0-9a-f]{6}$/i.test(activeColor)) {
+      customInput.value = activeColor;
+    }
+    if (customLabel) {
+      customLabel.classList.toggle('active', !matchedPreset);
+      customLabel.style.borderColor = !matchedPreset ? activeColor : '';
+      customLabel.style.background = !matchedPreset ? activeColor : '';
+    }
+
+    const activeW = Number(state.inkStrokeWidth) || 2.8;
+    document.querySelectorAll('.ink-width-btn').forEach(btn => {
+      const w = Number(btn.dataset.inkWidth);
+      btn.classList.toggle('active', Math.abs(w - activeW) < 0.25);
+    });
+
+    const pg = getActivePage();
+    const undoStack = pg ? (inkUndoByPage.get(pg.id) || []) : [];
+    const redoStack = pg ? (inkRedoByPage.get(pg.id) || []) : [];
+    const hasStrokes = Boolean(pg && pg.inkStrokes && pg.inkStrokes.length > 0);
+    const canUndo = undoStack.length > 0 || Boolean(pg && !inkUndoByPage.has(pg.id) && hasStrokes);
+
+    const undoBtn = document.getElementById('btnInkUndo');
+    const redoBtn = document.getElementById('btnInkRedo');
+    const clearBtn = document.getElementById('btnInkClear');
+    if (undoBtn) undoBtn.disabled = !canUndo;
+    if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+    if (clearBtn) clearBtn.disabled = !hasStrokes;
+  }
+
   function initOverlaysAndLaser() {
     const inkCanvas = document.getElementById('annotationCanvas');
     const laserCanvas = document.getElementById('laserCanvas');
     if (!inkCanvas || !laserCanvas) return;
 
     let drawingInk = false;
+    let erasingInk = false;
     let currentStroke = null;
+    let eraseBeforeSnapshot = null;
+    let eraseDidModify = false;
 
     const getCoords = (ev, canvas) => {
       const rect = canvas.getBoundingClientRect();
@@ -3568,19 +4075,41 @@
       return { x: cx - rect.left, y: cy - rect.top };
     };
 
-    // Llapis persistent dins la pàgina actual (ignora gestos de 2 dits per permetre desplaçament segur)
+    const eraseAtPoint = (page, pt) => {
+      if (!page || !Array.isArray(page.inkStrokes) || page.inkStrokes.length === 0) return;
+      const remaining = page.inkStrokes.filter(st => !isInkStrokeHit(st, pt));
+      if (remaining.length !== page.inkStrokes.length) {
+        page.inkStrokes = remaining;
+        eraseDidModify = true;
+        redrawAnnotations();
+      }
+    };
+
+    // Llapis i goma per traços dins la pàgina actual (ignora gestos de 2 dits per permetre desplaçament segur)
     const startInk = (ev) => {
       if (!state.inkActive) return;
       if (ev.touches && ev.touches.length > 1) {
         drawingInk = false;
+        erasingInk = false;
         currentStroke = null;
+        eraseBeforeSnapshot = null;
+        eraseDidModify = false;
         return;
       }
       ev.preventDefault();
       const page = getActivePage();
       if (!page) return;
-      drawingInk = true;
       const pt = getCoords(ev, inkCanvas);
+
+      if (state.inkSubTool === 'eraser') {
+        erasingInk = true;
+        eraseDidModify = false;
+        eraseBeforeSnapshot = [...(page.inkStrokes || [])];
+        eraseAtPoint(page, pt);
+        return;
+      }
+
+      drawingInk = true;
       currentStroke = {
         color: sanitizeColor(state.inkColor, '#ef4444'),
         width: Number.isFinite(Number(state.inkStrokeWidth)) ? Number(state.inkStrokeWidth) : 2.8,
@@ -3591,24 +4120,53 @@
       redrawAnnotations();
     };
     const moveInk = (ev) => {
-      if (!drawingInk || !currentStroke) return;
+      if (!drawingInk && !erasingInk) return;
       if (ev.touches && ev.touches.length > 1) {
         drawingInk = false;
+        erasingInk = false;
         currentStroke = null;
+        eraseBeforeSnapshot = null;
+        eraseDidModify = false;
         redrawAnnotations();
         return;
       }
       ev.preventDefault();
-      if (currentStroke.points.length < 4000) {
-        currentStroke.points.push(getCoords(ev, inkCanvas));
+      if (erasingInk) {
+        eraseAtPoint(getActivePage(), getCoords(ev, inkCanvas));
+        return;
       }
-      redrawAnnotations();
+      if (drawingInk && currentStroke) {
+        if (currentStroke.points.length < 4000) {
+          currentStroke.points.push(getCoords(ev, inkCanvas));
+        }
+        redrawAnnotations();
+      }
     };
     const endInk = () => {
+      const page = getActivePage();
+      if (erasingInk) {
+        erasingInk = false;
+        if (page && eraseDidModify && eraseBeforeSnapshot) {
+          pushInkUndoAction(page.id, {
+            type: 'snapshot',
+            before: eraseBeforeSnapshot,
+            after: [...(page.inkStrokes || [])]
+          });
+          saveState();
+        }
+        eraseBeforeSnapshot = null;
+        eraseDidModify = false;
+        updateInkToolbarUI();
+        return;
+      }
       if (drawingInk) {
         drawingInk = false;
+        if (page && currentStroke) {
+          pushInkUndoAction(page.id, { type: 'add', stroke: currentStroke });
+        }
         currentStroke = null;
         saveState();
+        updateInkToolbarUI();
       }
     };
 
@@ -3759,6 +4317,7 @@
       }
       ctx.stroke();
     }
+    updateInkToolbarUI();
   }
 
   // Temporitzador
@@ -4134,6 +4693,7 @@
       inkBtn?.classList.toggle('active', state.inkActive);
       inkToolbar?.classList.toggle('visible', state.inkActive);
       inkCanvas?.classList.toggle('drawing-active', state.inkActive);
+      updateInkToolbarUI();
       resizeOverlayCanvases();
     };
 
@@ -4149,26 +4709,100 @@
       syncPointerModes();
     });
 
+    document.getElementById('btnInkPenMode')?.addEventListener('click', () => {
+      state.inkSubTool = 'pen';
+      updateInkToolbarUI();
+    });
+
+    document.getElementById('btnInkEraserMode')?.addEventListener('click', () => {
+      state.inkSubTool = 'eraser';
+      updateInkToolbarUI();
+    });
+
     document.querySelectorAll('.ink-color-dot').forEach(dot => {
       dot.addEventListener('click', () => {
         state.inkColor = sanitizeColor(dot.dataset.color, '#ef4444');
-        document.querySelectorAll('.ink-color-dot').forEach(d => d.classList.toggle('active', d === dot));
+        state.inkSubTool = 'pen';
+        updateInkToolbarUI();
+      });
+    });
+
+    const customColorInput = document.getElementById('inkCustomColorInput');
+    const applyCustomInkColor = () => {
+      if (!customColorInput) return;
+      state.inkColor = sanitizeColor(customColorInput.value, '#ef4444');
+      state.inkSubTool = 'pen';
+      updateInkToolbarUI();
+    };
+    customColorInput?.addEventListener('input', applyCustomInkColor);
+    customColorInput?.addEventListener('change', applyCustomInkColor);
+
+    document.querySelectorAll('.ink-width-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const w = Number(btn.dataset.inkWidth);
+        if (Number.isFinite(w) && w > 0) {
+          state.inkStrokeWidth = w;
+          state.inkSubTool = 'pen';
+          saveState();
+          updateInkToolbarUI();
+        }
       });
     });
 
     document.getElementById('btnInkUndo')?.addEventListener('click', () => {
       const pg = getActivePage();
-      if (pg && pg.inkStrokes && pg.inkStrokes.length > 0) {
-        pg.inkStrokes.pop();
+      if (!pg) return;
+      pg.inkStrokes = pg.inkStrokes || [];
+      const undoStack = inkUndoByPage.get(pg.id);
+      if (undoStack && undoStack.length > 0) {
+        const act = undoStack.pop();
+        const redoStack = inkRedoByPage.get(pg.id) || [];
+        redoStack.push(act);
+        inkRedoByPage.set(pg.id, redoStack);
+        if (act.type === 'add') {
+          const idx = pg.inkStrokes.lastIndexOf(act.stroke);
+          if (idx >= 0) pg.inkStrokes.splice(idx, 1);
+        } else if (act.type === 'snapshot') {
+          pg.inkStrokes = [...act.before];
+        }
+        saveState();
+        redrawAnnotations();
+      } else if (!inkUndoByPage.has(pg.id) && pg.inkStrokes.length > 0) {
+        const popped = pg.inkStrokes.pop();
+        inkUndoByPage.set(pg.id, []);
+        const redoStack = inkRedoByPage.get(pg.id) || [];
+        redoStack.push({ type: 'add', stroke: popped });
+        inkRedoByPage.set(pg.id, redoStack);
         saveState();
         redrawAnnotations();
       }
     });
 
+    document.getElementById('btnInkRedo')?.addEventListener('click', () => {
+      const pg = getActivePage();
+      if (!pg) return;
+      const redoStack = inkRedoByPage.get(pg.id);
+      if (!redoStack || redoStack.length === 0) return;
+      const act = redoStack.pop();
+      const undoStack = inkUndoByPage.get(pg.id) || [];
+      undoStack.push(act);
+      inkUndoByPage.set(pg.id, undoStack);
+      pg.inkStrokes = pg.inkStrokes || [];
+      if (act.type === 'add') {
+        pg.inkStrokes.push(act.stroke);
+      } else if (act.type === 'snapshot') {
+        pg.inkStrokes = [...act.after];
+      }
+      saveState();
+      redrawAnnotations();
+    });
+
     document.getElementById('btnInkClear')?.addEventListener('click', () => {
       const pg = getActivePage();
-      if (pg) {
+      if (pg && pg.inkStrokes && pg.inkStrokes.length > 0) {
+        const before = [...pg.inkStrokes];
         pg.inkStrokes = [];
+        pushInkUndoAction(pg.id, { type: 'snapshot', before, after: [] });
         saveState();
         redrawAnnotations();
       }
@@ -4512,12 +5146,19 @@
       });
     });
 
-    // Modal d'Ajuda
+    // Modal d'Ajuda i Modal d'Historial de Versions
     const helpModal = document.getElementById('helpModal');
     document.getElementById('btnHelp')?.addEventListener('click', () => helpModal?.classList.add('open'));
     document.getElementById('btnCloseHelp')?.addEventListener('click', () => helpModal?.classList.remove('open'));
     helpModal?.addEventListener('click', (ev) => {
       if (ev.target === helpModal) helpModal.classList.remove('open');
+    });
+
+    const versionModal = document.getElementById('versionHistoryModal');
+    document.getElementById('btnVersionHistory')?.addEventListener('click', () => versionModal?.classList.add('open'));
+    document.getElementById('btnCloseVersionHistory')?.addEventListener('click', () => versionModal?.classList.remove('open'));
+    versionModal?.addEventListener('click', (ev) => {
+      if (ev.target === versionModal) versionModal.classList.remove('open');
     });
 
     // Tecla Escape tanca modals i popovers oberts
@@ -4526,6 +5167,7 @@
         settingsModal?.classList.remove('open');
         saveModal?.classList.remove('open');
         helpModal?.classList.remove('open');
+        versionModal?.classList.remove('open');
         if (state.graphOpen) {
           state.graphOpen = false;
           graphModal?.classList.remove('open');

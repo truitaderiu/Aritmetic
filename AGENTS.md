@@ -19,7 +19,7 @@ Aquest document està pensat per facilitar la feina a **futures instàncies d'ag
 | `js/keypads.js` | Definició declarativa dels teclats matemàtics (`window.KeypadConfig.KEYPAD_TABS`), dreceres `CUSTOM_INLINE_SHORTCUTS` i el document mostra `FULL_SHOWCASE_BLOCKS`. |
 | `js/app.js` | Estat central (`state`), gestió de Llibretes/Pàgines/Apartats, integració amb MathLive, compressió i redimensionament d'imatges, gràfica `<canvas>`, llapis/làser, PDF i pont `window.PissarraApp`. |
 | `js/cloud-drive.js` | Autenticació OAuth 2.0 (Google Identity Services) i sincronització REST amb Google Drive `appDataFolder` (`window.PissarraCloud`), detecció i resolució de conflictes. |
-| `vendor/mathlive/` | Còpia autohostajada de MathLive (`mathlive.min.js`, `mathlive-fonts.css`, `mathlive-static.css`) perquè l'app funcioni ràpid i sense dependre de CDNs de scripts matemàtics. |
+| `vendor/mathlive/` | Còpia autohostajada de MathLive (`mathlive.min.js`, `mathlive-fonts.css`, `mathlive-static.css`) perquè l'app funcioni ràpid i sense dependre de CDNs. Inclou pegat mínim a `mathlive.min.js` perquè `,` sigui `mord` en lloc de `mpunct` (evitant espai artificial a decimals catalans com `0,9`). |
 
 ---
 
@@ -43,7 +43,7 @@ Quan actualitzeu el contingut de la pàgina d'exemple `🌟 Tour Complet (Totes 
 {
   "kind": "pissarra_workspace",
   "version": 2,
-  "tourVersion": 6,
+  "tourVersion": 7,
   "savedAt": "2026-11-07T12:00:00.000Z",
   "activeNotebookId": "nb_...",
   "activePageId": "page_...",
@@ -141,17 +141,22 @@ El motor està dissenyat sota el principi de **Pissarra sense Errors**: l'usuari
 
 3. **Tokenització i Claus Canòniques (`tokenizeLatex`, `canonicalizeVarKey`)**:
    - Converteix `v_{\text{màx}}` i `v_{màx}` en la clau canònica interna `v_màx`, mantenint `v_{\text{màx}}` per a la visualització LaTeX al Tauler de Variables.
+   - Reconeix operadors de definició (`:=`, `\equiv`, `\triangleq`, `\stackrel{\text{def}}{=}`), barra d'avaluar en (`\left. expr \right|_{x=a,...}`), notació de Barrow (`\left[ F(x) \right]_a^b`) i desempaqueta `\mathbf`, `\boldsymbol`, `\underline`, `\uline`.
+   - Admet detecció universal de funcions (`P_B(x)`, `\Phi(\theta)`, `\vec{r}(t)`, `h(x,y)`) i derivades/partials ordinàries o creuades (`\partial`, `\nabla`, `\frac{\partial^k f}{\partial x_1 \dots}`).
    - Reconstrueix la multiplicació implícita (`2x`, `3\pi`, `(x+1)(x-1)`, `\sin 2x`) respectant la precedència d'operadors i les crides a funcions declarades `f(x)` o derivades `f'(x)`, `f''(x)`.
 
 4. **Parser AST i Seguretat contra DoS**:
    - Rebutja cadenes superiors a `8000` caràcters i limita la recursió sintàctica a `MAX_AST_DEPTH = 64`.
-   - Admet derivades numèriques d'ordre 1–3 (diferències centrades d'ordre 4), límits numèrics i laterals (`x \to a^+`, `x \to a^-`, `x \to \pm\infty`), integrals definides per Simpson adaptatiu i sumatoris/productoris finits.
+   - Admet derivades ordinàries i parcials (ordres 1–3), gradients `\nabla`, límits numèrics i laterals (`x \to a^+`, `x \to a^-`, `x \to \pm\infty`), integrals definides per Simpson adaptatiu, sumatoris/productoris finits (amb límits amb o sense claus i `\limits`) i funció Gamma `\Gamma(z)`.
+   - Opera directament sobre **vectors i matrius** (`+`, `-`, escalar, `\cdot`, `\times`, `\|\vec{v}\|`, producte matricial, `A^T`, `A^{-1}`, `\det`, `\text{tr}`, `\text{rang}`, angle, projecció i determinants `\begin{vmatrix}...\end{vmatrix}` $N\times N$ per Gauss).
 
 5. **Resolució de Punt Fix (`analyzeRows`)**:
    - Executa iteracions d'avaluació fins a convergir (permetent escriure primer la fórmula i a sota les dades!).
-   - Resol equacions d'1 incògnita: lineals exactes, quadràtiques amb detecció d'arrels múltiples o complexes (`\notin \mathbb{R}`), branques `\pm` i cerca numèrica d'arrels (mostreig + bisecció/secant).
-   - Resol sistemes lineals $N \times N$ per eliminació de Gauss-Jordan amb pivotatge parcial i classifica segons Rouché-Frobenius (`SCD`, `SCI`, `SI`).
+   - Resol equacions d'1 incògnita: lineals exactes, quadràtiques amb detecció d'arrels múltiples o complexes (`\notin \mathbb{R}`), inversió simbòlica d'ocurrència única (`solveBySingleOccurrenceInversion` per Weibull/exponencials/logaritmes amb raó diagnòstica `reason`), branques `\pm` i cerca numèrica d'arrels (mostreig + bisecció/secant).
+   - Resol sistemes lineals $N \times N$ per eliminació de Gauss-Jordan amb pivotatge parcial i sistemes no lineals 2D/3D (Newton-Raphson amb Jacobians numèrics i múltiple arrencada), i classifica sistemes lineals segons Rouché-Frobenius (`SCD`, `SCI`, `SI`).
    - Per a funcions a trossos, identifica punts frontera, calcula límits esquerre/dret i derivades laterals, classifica cada punt (`continuous`, `jump`, `removable`, `asymptotic`) i genera els punts oberts (`○`) i tancats (`●`) exactes per al `<canvas>` de la gràfica!
+
+> **Nota sobre el format de text en blocs (`kind: 'text'`)**: Per mantenir la compatibilitat cap enrere amb el JSON ja desat (sense afegir camps nous a `item`), l'editor enriquit desa negreta (`**...**`), subratllat (`__...__`) i cursiva (`*...*`) dins `item.text` i ho renderitza de forma segura a pantalla i PDF amb `markdownTextToSafeHtml()`. L'eina d'anotació (`#inkToolbar`) ofereix 9 colors + selector lliure, 3 gruixos, goma per traços, Desfer (`undo`) i Refer (`redo`).
 
 ---
 

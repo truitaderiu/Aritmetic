@@ -27,7 +27,7 @@
         { labelLatex: '\\sqrt{\\placeholder{}}', insert: '\\sqrt{#0}', title: 'Arrel quadrada (sqrt)' },
         { labelLatex: '\\sqrt[n]{\\placeholder{}}', insert: '\\sqrt[#?]{#0}', title: 'Arrel n-èsima (root)' },
         { labelLatex: '|a|', insert: '\\left|#0\\right|', title: 'Valor absolut / mòdul (|)' },
-        { labelText: '«text»', action: 'insertInlineText', className: 'btn-text-mode', title: 'Text curt dins de l\'equació (drecera: ")' },
+        { labelText: '«text»', action: 'insertInlineText', className: 'btn-text-mode', title: 'Text curt dins de l\'equació amb salt de línia (drecera: ")' },
 
         { labelLatex: '\\lim_{x\\to a}', insert: '\\lim_{x\\to #0}', title: 'Límit quan x tendeix a... (lim)' },
         { labelLatex: '\\infty', insert: '\\infty', title: 'Infinit (inf)' },
@@ -36,8 +36,13 @@
 
         { labelLatex: '(', insert: '\\left(#0\\right)', title: 'Parèntesis' },
         { labelLatex: '[\\,]', insert: '\\left[#0\\right]', title: 'Claudàtors' },
-        { labelLatex: '\\pi', insert: '\\pi', title: 'Nombre pi (pi)' },
-        { labelLatex: '\\rightarrow', insert: '\\rightarrow ', title: 'Fletxa (->)' }
+        { labelLatex: '\\{\\,\\}', insert: '\\left\\{#0\\right\\}', title: 'Claus { } (Mac: Option+ç)' },
+        { labelLatex: '\\rightarrow', insert: '\\rightarrow ', title: 'Fletxa (->)' },
+
+        { labelLatex: ':=', insert: ':= ', title: 'Definició (:=)' },
+        { labelLatex: '\\partial', insert: '\\partial ', title: 'Derivada parcial (drecera: partial)' },
+        { labelLatex: '\\left. f \\right|_{x=a}', insert: '\\left.#0\\right|_{#?}', title: 'Avaluar expressió en... (drecera: eval)' },
+        { labelLatex: '\\pi', insert: '\\pi', title: 'Nombre pi (pi)' }
       ],
       numpadGrid: [
         { labelLatex: '7', insert: '7', className: 'btn-num' },
@@ -72,11 +77,14 @@
         { labelLatex: '\\boxed{x}', insert: '\\boxed{#0}', title: 'Emmarcar resultat final', span: 1 },
 
         { labelText: '⇥ Tab', insert: '\\qquad ', className: 'btn-text-mode', title: 'Inserir tabulació / separació en la mateixa línia (Tecla Tab)', span: 1 },
-        { labelText: '¶ Text', action: 'addTextBlockInApartat', className: 'btn-text-mode', title: 'Afegeix un paràgraf de text amb salt de línia automàtic dins l\'apartat actual (Alt+T)', span: 1 },
+        { labelText: '¶ Text', action: 'addTextBlockInApartat', className: 'btn-text-mode', title: 'Afegeix un paràgraf de text amb format i salt de línia automàtic (Alt+T)', span: 1 },
         { labelText: '⌫', cmd: 'deleteBackward', className: 'btn-backspace', title: 'Esborrar caràcter', span: 2 },
 
+        { labelLatex: '\\mathbf{N}', cmd: 'mathBold', className: 'btn-text-mode', title: 'Negreta dins de l\'equació o selecció (Cmd/Ctrl+B)', span: 1 },
+        { labelLatex: '\\underline{S}', cmd: 'mathUnderline', className: 'btn-text-mode', title: 'Subratllar selecció o bloc (Cmd/Ctrl+U)', span: 1 },
         { labelText: '↵ Nova línia', action: 'newMathLineInApartat', className: 'btn-enter', title: 'Nova línia d\'equació dins del mateix apartat (Enter)', span: 2 },
-        { labelText: '⊞ Nou apartat', action: 'newApartatBelow', className: 'btn-enter-secondary', title: 'Crea un nou apartat a sota (Cmd/Ctrl + Enter o doble Enter)', span: 2 }
+
+        { labelText: '⊞ Nou apartat', action: 'newApartatBelow', className: 'btn-enter-secondary', title: 'Crea un nou apartat a sota (Cmd/Ctrl + Enter o doble Enter)', span: 4 }
       ]
     },
     {
@@ -99,16 +107,24 @@
           ]
         },
         {
-          title: 'Derivades i Integrals',
+          title: 'Derivades, Parcials i Integrals',
           cols: 4,
           items: [
             { labelLatex: 'f\'(x)', insert: 'f\'(#0)', title: 'Derivada primera' },
             { labelLatex: 'f\'\'(x)', insert: 'f\'\'(#0)', title: 'Derivada segona' },
-            { labelLatex: '\\frac{d}{dx}', insert: '\\frac{d}{dx}\\left(#0\\right)', title: 'Operador derivada respecte x' },
+            { labelLatex: '\\frac{d}{dx}', insert: '\\frac{d}{dx}\\left(#0\\right)', title: 'Operador derivada respecte x (drecera: ddx)' },
             { labelLatex: '\\frac{dy}{dx}', insert: '\\frac{d#0}{d#?}', title: 'Notació de Leibniz' },
+            { labelLatex: '\\partial', insert: '\\partial ', title: 'Símbol de derivada parcial (partial)' },
+            { labelLatex: '\\frac{\\partial}{\\partial x}', insert: '\\frac{\\partial}{\\partial #?}\\left(#0\\right)', title: 'Operador derivada parcial (drecera: pd)' },
+            { labelLatex: '\\frac{\\partial f}{\\partial x}', insert: '\\frac{\\partial #0}{\\partial #?}', title: 'Derivada parcial de funció' },
+            { labelLatex: '\\frac{\\partial^2 f}{\\partial x^2}', insert: '\\frac{\\partial^{2} #0}{\\partial #?^{2}}', title: 'Derivada parcial segona' },
+            { labelLatex: '\\frac{\\partial^2 f}{\\partial x\\partial y}', insert: '\\frac{\\partial^{2} #0}{\\partial #? \\partial #?}', title: 'Derivada parcial mixta' },
+            { labelLatex: '\\nabla', insert: '\\nabla #0', title: 'Gradient / nabla (nabla)' },
+            { labelLatex: '\\left. f(x) \\right|_{x=a}', insert: '\\left.#0\\right|_{#?=#?}', title: 'Barra vertical d\'avaluació (eval)' },
+            { labelLatex: '\\Big[F(x)\\Big]_a^b', insert: '\\left[#0\\right]_{#?}^{#?}', title: 'Regla de Barrow (barrow)' },
             { labelLatex: '\\int f\\,dx', insert: '\\int #0 \\,dx', title: 'Integral indefinida (int)' },
-            { labelLatex: '\\int_a^b f\\,dx', insert: '\\int_{#?}^{#?} #0 \\,dx', title: 'Integral definida' },
-            { labelLatex: '\\Big[F(x)\\Big]_a^b', insert: '\\left[#0\\right]_{#?}^{#?}', title: 'Regla de Barrow' },
+            { labelLatex: '\\int_a^b f\\,dx', insert: '\\int_{#?}^{#?} #0 \\,dx', title: 'Integral definida (dint)' },
+            { labelLatex: '\\iint f', insert: '\\iint #0 \\,dx\\,dy', title: 'Integral doble (notació)' },
             { labelLatex: '\\underbrace{a}_{b}', insert: '\\underbrace{#0}_{\\text{#?}}', title: 'Clau inferior explicativa' }
           ]
         },
@@ -151,7 +167,7 @@
           ]
         },
         {
-          title: 'Sistemes i Sumatoris',
+          title: 'Sistemes, Sèries i Funció Gamma',
           cols: 4,
           items: [
             {
@@ -164,12 +180,12 @@
               insert: '\\begin{cases} #0 \\\\ #? \\\\ #? \\end{cases}',
               title: 'Sistema de 3 equacions'
             },
-            { labelLatex: '\\textstyle\\sum_{i=1}^n', insert: '\\sum_{#?=1}^{#?} #0', title: 'Sumatori' },
+            { labelLatex: '\\textstyle\\sum_{i=1}^n', insert: '\\sum_{#?=0}^{#?} #0', title: 'Sumatori (sum)' },
+            { labelLatex: '\\textstyle\\prod_{i=1}^n', insert: '\\prod_{#?=1}^{#?} #0', title: 'Productori' },
             { labelLatex: '\\binom{n}{k}', insert: '\\binom{#0}{#?}', title: 'Nombre combinatori' },
-            { labelLatex: 'n!', insert: '#0!', title: 'Factorial' },
-            { labelLatex: '\\cancel{x}', insert: '\\cancel{#0}', title: 'Ratllar factor per simplificar' },
-            { labelLatex: '\\boxed{x=1}', insert: '\\boxed{#0}', title: 'Emmarcar solució' },
-            { labelText: '¶ Bloc text', action: 'addTextBlockInApartat', className: 'btn-text-mode', title: 'Inserir bloc de paràgraf dins l\'apartat' }
+            { labelLatex: 'n!', insert: '#0!', title: 'Factorial (enters i reals)' },
+            { labelLatex: '\\Gamma(z)', insert: '\\Gamma\\left(#0\\right)', title: 'Funció Gamma Γ(z)' },
+            { labelLatex: '\\text{mcd}(a,b)', insert: '\\operatorname{mcd}\\left(#0, #?\\right)', title: 'Màxim comú divisor / mcm' }
           ]
         }
       ]
@@ -186,7 +202,7 @@
             {
               labelLatex: '\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}',
               insert: '\\begin{pmatrix} #0 & #? \\\\ #? & #? \\end{pmatrix}',
-              title: 'Matriu 2×2'
+              title: 'Matriu 2×2 amb parèntesis'
             },
             {
               labelLatex: '\\begin{pmatrix} \\cdot & \\cdot & \\cdot \\\\ \\cdot & \\cdot & \\cdot \\\\ \\cdot & \\cdot & \\cdot \\end{pmatrix}',
@@ -194,42 +210,55 @@
               title: 'Matriu 3×3'
             },
             {
+              labelLatex: '\\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}',
+              insert: '\\begin{bmatrix} #0 & #? \\\\ #? & #? \\end{bmatrix}',
+              title: 'Matriu 2×2 amb claudàtors'
+            },
+            {
               labelLatex: '\\begin{vmatrix} a & b \\\\ c & d \\end{vmatrix}',
               insert: '\\begin{vmatrix} #0 & #? \\\\ #? & #? \\end{vmatrix}',
-              title: 'Determinant 2×2 (es calcula al tauler!)'
+              title: 'Determinant 2×2 (es calcula automàticament!)'
             },
             {
               labelLatex: '\\begin{vmatrix} \\cdot & \\cdot & \\cdot \\\\ \\cdot & \\cdot & \\cdot \\\\ \\cdot & \\cdot & \\cdot \\end{vmatrix}',
               insert: '\\begin{vmatrix} #0 & #? & #? \\\\ #? & #? & #? \\\\ #? & #? & #? \\end{vmatrix}',
-              title: 'Determinant 3×3 (Sarrus automàtic al tauler!)'
+              title: 'Determinant 3×3 (o superior NxN)'
             },
             { labelText: '+ Fila mat.', cmd: 'addRowAfter', title: 'Afegeix fila a la matriu o sistema actual' },
             { labelText: '+ Columna', cmd: 'addColumnAfter', title: 'Afegeix columna a la matriu actual' },
             { labelLatex: 'A^{-1}', insert: '#0^{-1}', title: 'Matriu inversa' },
-            { labelLatex: 'A^t', insert: '#0^{t}', title: 'Matriu transposada' }
+            { labelLatex: 'A^T', insert: '#0^{T}', title: 'Matriu transposada' },
+            { labelLatex: '\\det(A)', insert: '\\det\\left(#0\\right)', title: 'Determinant de matriu' },
+            { labelLatex: '\\operatorname{tr}(A)', insert: '\\operatorname{tr}\\left(#0\\right)', title: 'Traça d\'una matriu' },
+            { labelLatex: '\\operatorname{rang}(A)', insert: '\\operatorname{rang}\\left(#0\\right)', title: 'Rang d\'una matriu' }
           ]
         },
         {
           title: 'Vectors i Espai Afí / Euclidià',
           cols: 4,
           items: [
+            { labelLatex: '(x,y)', insert: '(#0, #?)', title: 'Vector 2D per components' },
+            { labelLatex: '(x,y,z)', insert: '(#0, #?, #?)', title: 'Vector 3D per components' },
             { labelLatex: '\\vec{v}', insert: '\\vec{#0}', title: 'Vector amb fletxa' },
             { labelLatex: '\\overrightarrow{AB}', insert: '\\overrightarrow{#0}', title: 'Vector entre dos punts' },
             { labelLatex: '\\|\\vec{v}\\|', insert: '\\left\\|#0\\right\\|', title: 'Mòdul / norma d\'un vector' },
-            { labelLatex: '\\vec{u}\\times\\vec{v}', insert: '\\times ', title: 'Producte vectorial' },
-            { labelLatex: '\\vec{u}\\cdot\\vec{v}', insert: '\\cdot ', title: 'Producte escalar' },
+            { labelLatex: '\\vec{u}\\cdot\\vec{v}', insert: '\\cdot ', title: 'Producte escalar (u · v)' },
+            { labelLatex: '\\vec{u}\\times\\vec{v}', insert: '\\times ', title: 'Producte vectorial 3D (u × v)' },
+            { labelLatex: '\\operatorname{angle}', insert: '\\operatorname{angle}\\left(#0, #?\\right)', title: 'Angle entre dos vectors' },
+            { labelLatex: '\\operatorname{proj}_{\\vec{v}}', insert: '\\operatorname{proj}_{#?}\\left(#0\\right)', title: 'Projecció ortogonal de vector' },
             { labelLatex: '\\perp', insert: '\\perp ', title: 'Perpendicular' },
             { labelLatex: '\\parallel', insert: '\\parallel ', title: 'Paral·lel' },
-            { labelLatex: '\\widehat{ABC}', insert: '\\widehat{#0}', title: 'Angle' }
+            { labelLatex: '\\widehat{ABC}', insert: '\\widehat{#0}', title: 'Angle entre rectes/plans' }
           ]
         },
         {
-          title: 'Polinomis, Rangs i Equació Quadràtica',
-          cols: 3,
+          title: 'Aritmètica, Polinomis i Fórmules',
+          cols: 4,
           items: [
-            { labelLatex: '\\text{rang}(A)', insert: '\\text{rang}\\left(#0\\right)', title: 'Rang d\'una matriu' },
+            { labelLatex: '\\operatorname{mcd}', insert: '\\operatorname{mcd}\\left(#0, #?\\right)', title: 'Màxim comú divisor' },
+            { labelLatex: '\\operatorname{mcm}', insert: '\\operatorname{mcm}\\left(#0, #?\\right)', title: 'Mínim comú múltiple' },
             { labelLatex: '\\Delta = b^2-4ac', insert: '\\Delta = b^2 - 4ac', title: 'Discriminant' },
-            { labelLatex: '\\frac{-b\\pm\\sqrt{\\dots}}{2a}', insert: '\\frac{-#0 \\pm \\sqrt{#?}}{2#?}', title: 'Plantilla fórmula equació 2n grau' }
+            { labelLatex: '\\frac{-b\\pm\\sqrt{\\dots}}{2a}', insert: '\\frac{-#0 \\pm \\sqrt{#?}}{2#?}', title: 'Equació de 2n grau' }
           ]
         }
       ]
@@ -254,14 +283,14 @@
           ]
         },
         {
-          title: 'Logaritmes i Exponencials',
+          title: 'Logaritmes, Exponencials i Especials',
           cols: 4,
           items: [
             { labelLatex: '\\ln', insert: '\\ln\\left(#0\\right)', title: 'Logaritme neperià' },
             { labelLatex: '\\log', insert: '\\log\\left(#0\\right)', title: 'Logaritme decimal (base 10)' },
             { labelLatex: '\\log_b', insert: '\\log_{#?}\\left(#0\\right)', title: 'Logaritme en base b' },
             { labelLatex: 'e^x', insert: 'e^{#0}', title: 'Exponencial base e' },
-            { labelLatex: '10^x', insert: '10^{#0}', title: 'Potència de 10' },
+            { labelLatex: '\\Gamma(x)', insert: '\\Gamma\\left(#0\\right)', title: 'Funció Gamma' },
             { labelLatex: 'e', insert: 'e', title: 'Constant d\'Euler e ≈ 2,71828' },
             { labelLatex: '\\pi', insert: '\\pi', title: 'Constant pi ≈ 3,14159' },
             { labelLatex: 'i', insert: 'i', title: 'Unitat imaginària' }
@@ -284,51 +313,110 @@
       layout: 'Categorized',
       groups: [
         {
+          title: 'Definició, Equivalències i Relacions',
+          cols: 6,
+          items: [
+            { labelLatex: ':=', insert: ':= ', title: 'Definició (:=)' },
+            { labelLatex: '\\equiv', insert: '\\equiv ', title: 'Idèntic / equivalent / congruent (equiv)' },
+            { labelLatex: '\\triangleq', insert: '\\triangleq ', title: 'Igual per definició (triangle)' },
+            { labelLatex: '\\stackrel{\\text{def}}{=}', insert: '\\stackrel{\\text{def}}{=} ', title: 'Igual per definició (def=)' },
+            { labelLatex: '\\approx', insert: '\\approx ', title: 'Aproximadament (~=)' },
+            { labelLatex: '\\sim', insert: '\\sim ', title: 'Asimptòtic / distribució estadística (~)' },
+            { labelLatex: '\\simeq', insert: '\\simeq ', title: 'Aproximat / isomorf' },
+            { labelLatex: '\\cong', insert: '\\cong ', title: 'Congruent' },
+            { labelLatex: '\\propto', insert: '\\propto ', title: 'Proporcional a' },
+            { labelLatex: '\\Rightarrow', insert: '\\Rightarrow ', title: 'Implica (=>)' },
+            { labelLatex: '\\Leftrightarrow', insert: '\\Leftrightarrow ', title: 'Si i només si (<=>)' },
+            { labelLatex: '\\mapsto', insert: '\\mapsto ', title: 'Assigna / aplica (x |-> f(x))' }
+          ]
+        },
+        {
           title: 'Lògica i Conjunts Numèrics',
           cols: 6,
           items: [
-            { labelLatex: '\\Rightarrow', insert: '\\Rightarrow ' },
-            { labelLatex: '\\Leftrightarrow', insert: '\\Leftrightarrow ' },
             { labelLatex: '\\forall', insert: '\\forall ' },
             { labelLatex: '\\exists', insert: '\\exists ' },
             { labelLatex: '\\nexists', insert: '\\nexists ' },
             { labelLatex: '\\therefore', insert: '\\therefore ', title: 'Per tant' },
+            { labelLatex: '\\because', insert: '\\because ', title: 'Perquè' },
+            { labelLatex: '\\emptyset', insert: '\\emptyset ' },
             { labelLatex: '\\in', insert: '\\in ' },
             { labelLatex: '\\notin', insert: '\\notin ' },
+            { labelLatex: '\\subset', insert: '\\subset ' },
+            { labelLatex: '\\subseteq', insert: '\\subseteq ' },
             { labelLatex: '\\cup', insert: '\\cup ' },
             { labelLatex: '\\cap', insert: '\\cap ' },
-            { labelLatex: '\\subset', insert: '\\subset ' },
-            { labelLatex: '\\emptyset', insert: '\\emptyset ' },
+            { labelLatex: '\\setminus', insert: '\\setminus ', title: 'Diferència de conjunts' },
             { labelLatex: '\\mathbb{R}', insert: '\\mathbb{R}' },
             { labelLatex: '\\mathbb{R}-\\{\\}', insert: '\\mathbb{R} - \\left\\{#0\\right\\}', title: 'Tots els reals excepte...' },
             { labelLatex: '\\mathbb{N}', insert: '\\mathbb{N}' },
             { labelLatex: '\\mathbb{Z}', insert: '\\mathbb{Z}' },
             { labelLatex: '\\mathbb{Q}', insert: '\\mathbb{Q}' },
-            { labelLatex: '\\mathbb{C}', insert: '\\mathbb{C}' }
+            { labelLatex: '\\mathbb{C}', insert: '\\mathbb{C}' },
+            { labelLatex: '\\pm', insert: '\\pm' },
+            { labelLatex: '\\mp', insert: '\\mp' },
+            { labelLatex: '\\mathbf{N}', cmd: 'mathBold', className: 'btn-text-mode', title: 'Negreta (Cmd/Ctrl+B)' },
+            { labelLatex: '\\underline{S}', cmd: 'mathUnderline', className: 'btn-text-mode', title: 'Subratllat (Cmd/Ctrl+U)' }
           ]
         },
         {
-          title: 'Alfabet Grec',
-          cols: 6,
+          title: 'Alfabet Grec — Minúscules i Variants',
+          cols: 8,
           items: [
-            { labelLatex: '\\alpha', insert: '\\alpha' },
-            { labelLatex: '\\beta', insert: '\\beta' },
-            { labelLatex: '\\gamma', insert: '\\gamma' },
-            { labelLatex: '\\delta', insert: '\\delta' },
-            { labelLatex: '\\Delta', insert: '\\Delta' },
-            { labelLatex: '\\varepsilon', insert: '\\varepsilon' },
-            { labelLatex: '\\theta', insert: '\\theta' },
-            { labelLatex: '\\lambda', insert: '\\lambda' },
-            { labelLatex: '\\mu', insert: '\\mu' },
-            { labelLatex: '\\rho', insert: '\\rho' },
-            { labelLatex: '\\sigma', insert: '\\sigma' },
-            { labelLatex: '\\tau', insert: '\\tau' },
-            { labelLatex: '\\varphi', insert: '\\varphi' },
-            { labelLatex: '\\omega', insert: '\\omega' },
-            { labelLatex: '\\Omega', insert: '\\Omega' },
-            { labelLatex: '\\Delta x', insert: '\\Delta x' },
-            { labelLatex: '\\Delta y', insert: '\\Delta y' },
-            { labelLatex: '\\Delta t', insert: '\\Delta t' }
+            { labelLatex: '\\alpha', insert: '\\alpha', title: 'alfa (alpha)' },
+            { labelLatex: '\\beta', insert: '\\beta', title: 'beta' },
+            { labelLatex: '\\gamma', insert: '\\gamma', title: 'gamma' },
+            { labelLatex: '\\delta', insert: '\\delta', title: 'delta' },
+            { labelLatex: '\\epsilon', insert: '\\epsilon', title: 'èpsilon' },
+            { labelLatex: '\\varepsilon', insert: '\\varepsilon', title: 'èpsilon variant (epsilon)' },
+            { labelLatex: '\\zeta', insert: '\\zeta', title: 'zeta' },
+            { labelLatex: '\\eta', insert: '\\eta', title: 'eta' },
+            { labelLatex: '\\theta', insert: '\\theta', title: 'theta' },
+            { labelLatex: '\\vartheta', insert: '\\vartheta', title: 'theta variant (vartheta)' },
+            { labelLatex: '\\iota', insert: '\\iota', title: 'iota' },
+            { labelLatex: '\\kappa', insert: '\\kappa', title: 'kappa' },
+            { labelLatex: '\\varkappa', insert: '\\varkappa', title: 'kappa variant' },
+            { labelLatex: '\\lambda', insert: '\\lambda', title: 'lambda' },
+            { labelLatex: '\\mu', insert: '\\mu', title: 'mu' },
+            { labelLatex: '\\nu', insert: '\\nu', title: 'nu' },
+            { labelLatex: '\\xi', insert: '\\xi', title: 'xi' },
+            { labelLatex: '\\pi', insert: '\\pi', title: 'pi' },
+            { labelLatex: '\\varpi', insert: '\\varpi', title: 'pi variant' },
+            { labelLatex: '\\rho', insert: '\\rho', title: 'rho' },
+            { labelLatex: '\\varrho', insert: '\\varrho', title: 'rho variant' },
+            { labelLatex: '\\sigma', insert: '\\sigma', title: 'sigma' },
+            { labelLatex: '\\varsigma', insert: '\\varsigma', title: 'sigma final' },
+            { labelLatex: '\\tau', insert: '\\tau', title: 'tau' },
+            { labelLatex: '\\upsilon', insert: '\\upsilon', title: 'ípsilon' },
+            { labelLatex: '\\phi', insert: '\\phi', title: 'phi' },
+            { labelLatex: '\\varphi', insert: '\\varphi', title: 'phi variant (phi)' },
+            { labelLatex: '\\chi', insert: '\\chi', title: 'khi' },
+            { labelLatex: '\\psi', insert: '\\psi', title: 'psi' },
+            { labelLatex: '\\omega', insert: '\\omega', title: 'omega' },
+            { labelLatex: '\\ell', insert: '\\ell', title: 'l cal·ligràfica' },
+            { labelLatex: '\\hbar', insert: '\\hbar', title: 'constant de Planck reduïda' }
+          ]
+        },
+        {
+          title: 'Alfabet Grec — Majúscules i Operadors Especials',
+          cols: 8,
+          items: [
+            { labelLatex: '\\Gamma', insert: '\\Gamma', title: 'Gamma majúscula / funció Gamma' },
+            { labelLatex: '\\Delta', insert: '\\Delta', title: 'Delta majúscula' },
+            { labelLatex: '\\Theta', insert: '\\Theta', title: 'Theta majúscula' },
+            { labelLatex: '\\Lambda', insert: '\\Lambda', title: 'Lambda majúscula' },
+            { labelLatex: '\\Xi', insert: '\\Xi', title: 'Xi majúscula' },
+            { labelLatex: '\\Pi', insert: '\\Pi', title: 'Pi majúscula' },
+            { labelLatex: '\\Sigma', insert: '\\Sigma', title: 'Sigma majúscula' },
+            { labelLatex: '\\Upsilon', insert: '\\Upsilon', title: 'Ípsilon majúscula' },
+            { labelLatex: '\\Phi', insert: '\\Phi', title: 'Phi majúscula' },
+            { labelLatex: '\\Psi', insert: '\\Psi', title: 'Psi majúscula' },
+            { labelLatex: '\\Omega', insert: '\\Omega', title: 'Omega majúscula' },
+            { labelLatex: '\\aleph', insert: '\\aleph', title: 'Àlef (cardinalitat)' },
+            { labelLatex: '\\partial', insert: '\\partial ', title: 'Derivada parcial' },
+            { labelLatex: '\\nabla', insert: '\\nabla ', title: 'Nabla / gradient' },
+            { labelLatex: '\\Delta x', insert: '\\Delta x', title: 'Increment de x' },
+            { labelLatex: '\\Delta y', insert: '\\Delta y', title: 'Increment de y' }
           ]
         }
       ]
@@ -341,10 +429,20 @@
     'lim': '\\lim_{x\\to #?}',
     'int': '\\int #? \\,dx',
     'dint': '\\int_{#?}^{#?} #? \\,dx',
-    'sum': '\\sum_{i=1}^{#?}',
+    'sum': '\\sum_{i=0}^{#?}',
     'sqrt': '\\sqrt{#?}',
     'cbrt': '\\sqrt[3]{#?}',
     'root': '\\sqrt[#?]{#?}',
+    'partial': '\\partial',
+    'pd': '\\frac{\\partial #?}{\\partial #?}',
+    'ddx': '\\frac{d}{dx}\\left(#?\\right)',
+    'nabla': '\\nabla',
+    'grad': '\\nabla',
+    'def=': '\\stackrel{\\text{def}}{=}',
+    ':=': ':=',
+    'equiv': '\\equiv',
+    'eval': '\\left.#?\\right|_{#?}',
+    'barrow': '\\left[#?\\right]_{#?}^{#?}',
     '->': '\\rightarrow',
     '=>': '\\Rightarrow',
     '<=>': '\\Leftrightarrow',
@@ -364,14 +462,39 @@
     'alpha': '\\alpha',
     'beta': '\\beta',
     'gamma': '\\gamma',
+    'Gamma': '\\Gamma',
     'delta': '\\delta',
     'Delta': '\\Delta',
+    'epsilon': '\\varepsilon',
+    'varepsilon': '\\varepsilon',
+    'zeta': '\\zeta',
+    'eta': '\\eta',
     'theta': '\\theta',
+    'vartheta': '\\vartheta',
+    'Theta': '\\Theta',
+    'kappa': '\\kappa',
     'lambda': '\\lambda',
+    'Lambda': '\\Lambda',
     'mu': '\\mu',
+    'nu': '\\nu',
+    'xi': '\\xi',
+    'Xi': '\\Xi',
+    'pi': '\\pi',
+    'Pi': '\\Pi',
+    'rho': '\\rho',
     'sigma': '\\sigma',
+    'Sigma': '\\Sigma',
+    'tau': '\\tau',
+    'upsilon': '\\upsilon',
+    'Upsilon': '\\Upsilon',
+    'phi': '\\varphi',
+    'varphi': '\\varphi',
+    'Phi': '\\Phi',
+    'chi': '\\chi',
+    'psi': '\\psi',
+    'Psi': '\\Psi',
     'omega': '\\omega',
-    'pi': '\\pi'
+    'Omega': '\\Omega'
   };
 
   // ==========================================================================
@@ -682,7 +805,39 @@
       items: [
         {
           kind: 'text',
-          text: 'Ja domines el motor matemàtic! Completa l\'experiència amb les eines superiors:\n1. 🔴 Làser, ✏️ Anotar i ⏱️ Temps: assenyala passos amb un rastre làser efímer, dibuixa fletxes a mà alçada sobre la pàgina o activa un compte enrere / cronòmetre.\n2. ⚙️ Configuració i Temes: escull entre 6 tipografies, regula la mida exacta del text introduït amb «"», activa quadrícula o punts de fons, i tria entre els 6 temes visuals o crea un Tema Personalitzat amb els colors exactes que vulguis!\n3. 🖨️ PDF i 💾 Desar / Obrir: genera un document A4 nítid (amb equacions, textos i imatges maquetats) llest per imprimir o enviar, copia el codi LaTeX de la pàgina o baixa còpies .json al teu ordinador.\n4. ☁️ Drive: vincula el teu Google Drive per sincronitzar privada i automàticament totes les llibretes, imatges i ajustos entre l\'ordinador, la tauleta i el mòbil.'
+          text: 'Ja domines el motor matemàtic! Completa l\'experiència amb les eines superiors:\n1. **🔴 Làser, ✏️ Anotar i ⏱️ Temps:** assenyala passos amb un rastre làser efímer, dibuixa amb __9 colors + color a mida + goma d\'esborrar per traços__, o activa un cronòmetre.\n2. **⚙️ Configuració i Temes:** escull entre 6 tipografies, regula la mida del text introduït amb «"», i tria entre els 6 temes visuals o un Tema Personalitzat.\n3. **🖨️ PDF i 💾 Desar / Obrir:** genera un document A4 nítid (amb negreta i subratllat preservats) o exporta en .json / LaTeX.\n4. **☁️ Drive:** vincula el teu Google Drive per sincronitzar privada i automàticament totes les llibretes entre dispositius.'
+        }
+      ]
+    },
+
+    {
+      type: 'section',
+      title: 'Pas 9 — Novetats d\'Aritmètic v1.1 (Vectors, Matrius, Parcials, Weibull i Format)'
+    },
+    {
+      type: 'apartat',
+      label: 'Apartat 9a — Àlgebra lineal real, derivades parcials, funció Gamma i avaluació',
+      accent: 'none',
+      items: [
+        {
+          kind: 'text',
+          text: 'La **versió 1.1** amplia profundament el motor simbòlic-numèric: opera directament amb **vectors i matrius** (producte escalar, vectorial, norma, inversa, transposada, traça i rang), **derivades parcials i gradients**, la barra d\'__avaluar en__, la funció **Gamma**, operadors de definició («:=», «≡», «≜») i resolució analítica d\'equacions no lineals encadenades!'
+        },
+        {
+          kind: 'math',
+          latex: '\\vec{u} := (1, 2, 3), \\qquad \\vec{v} := (4, -1, 2), \\qquad \\vec{w} = \\vec{u} \\times \\vec{v}, \\qquad m_u = \\|\\vec{u}\\|'
+        },
+        {
+          kind: 'math',
+          latex: 'K = \\begin{pmatrix} 1 & 2 \\\\ 3 & 4 \\end{pmatrix}, \\qquad B = K^{-1}, \\qquad d_K = \\det(K), \\qquad r_K = \\operatorname{rang}(K)'
+        },
+        {
+          kind: 'math',
+          latex: 'h(x, y) := x^3 y + 2 x y^2, \\qquad p_1 = \\left. \\frac{\\partial h}{\\partial x} \\right|_{x=2, y=1}, \\qquad \\vec{g} = \\nabla h(1, 2)'
+        },
+        {
+          kind: 'math',
+          latex: '\\alpha = 2,8 \\qquad x_w = 16 \\qquad F_w(x_w) = 0,9 = 1 - e^{-(x_w/\\beta)^{\\alpha}} \\qquad E_w = \\beta \\cdot \\Gamma\\left(1 + \\frac{1}{\\alpha}\\right)'
         }
       ]
     }
